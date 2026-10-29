@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "indian-day-trader-skill",
+  "description": "The Indian Day Trader skill pack for Claude and AI agents: day trading NSE & BSE stocks with zero API keys.",
+  "owner": {
+    "name": "Indian Day Trader Skill",
+    "url": "https://github.com/SaurabhTomar/indian-day-trader-skill"
+  },
+  "plugins": [
+    {
+      "name": "indian-day-trader-skill",
+      "description": "Eleven Claude skills for Indian day trading: an NSE chart scanner, news and corporate filings monitor, entry timer, exit planner, 10,000-path session simulator, risk manager (SEBI compliance), INR budget & statutory charges manager, broker ticket generator (Zerodha, Groww, Angel One, Upstox, Dhan), price alerts, Ind-AS financial results analyst, and SEBI insider trading / bulk deal tracker.",
+      "source": "./",
+      "category": "productivity",
+      "homepage": "https://github.com/SaurabhTomar/indian-day-trader-skill"
+    }
+  ]
+}
