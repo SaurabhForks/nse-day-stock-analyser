@@ -22,6 +22,13 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import ssl
+
+try:
+    import certifi
+    SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    SSL_CTX = ssl._create_unverified_context()
 
 UA = "Mozilla/5.0 (compatible; indian-day-trader-skill/2.0; +https://github.com/SaurabhTomar/indian-day-trader-skill)"
 PAUSE = 0.5
@@ -119,10 +126,10 @@ def fetch_chart(symbol, interval="5m", offline=None):
     url = "https://%s.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=%s" % (
         YAHOO_HOSTS[0], y_sym, interval
     )
-    headers = {"User-Agent": UA}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=SSL_CTX) as resp:
             data = resp.read()
             if resp.info().get("Content-Encoding") == "gzip":
                 data = gzip.decompress(data)

@@ -58,6 +58,13 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import ssl
+
+try:
+    import certifi
+    SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    SSL_CTX = ssl._create_unverified_context()
 
 UA = "Mozilla/5.0 (compatible; indian-day-trader-skill/2.0; +https://github.com/SaurabhTomar/indian-day-trader-skill)"
 YAHOO_HOSTS = ("https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com")
@@ -243,11 +250,11 @@ def display_symbol(sym):
 
 def fetch_json(url, pause=PAUSE):
     """Fetch URL and parse JSON with retries."""
-    headers = {"User-Agent": UA}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     for attempt in range(2):
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=15, context=SSL_CTX) as resp:
                 data = resp.read()
                 if resp.info().get("Content-Encoding") == "gzip":
                     data = gzip.decompress(data)
@@ -372,7 +379,7 @@ def run_universe(args):
         url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=10, context=SSL_CTX) as resp:
                 content = resp.read().decode("utf-8", errors="replace")
                 stocks = filter_equity_l(content)
         except Exception:

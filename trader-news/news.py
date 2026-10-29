@@ -24,6 +24,13 @@ import time
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
+import ssl
+
+try:
+    import certifi
+    SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    SSL_CTX = ssl._create_unverified_context()
 
 YAHOO_RSS = "https://feeds.finance.yahoo.com/rss/2.0/headline?s=%s&region=IN&lang=en-IN"
 CHART_URL = "https://%s.finance.yahoo.com/v8/finance/chart/%s?range=1d&interval=5m"
@@ -92,9 +99,9 @@ def tag_headline(title):
 
 
 def fetch_url(url, timeout=10):
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=SSL_CTX) as resp:
             data = resp.read()
             if resp.info().get("Content-Encoding") == "gzip":
                 data = gzip.decompress(data)
