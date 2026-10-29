@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NSE Day Stock Analyser - Interactive ORB Terminal</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card-bg: #131b26;
+      --border: #233044;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #2563eb;
+      --bull: #10b981;
+      --bear: #f43f5e;
+      --vwap: #f59e0b;
+      --or: #38bdf8;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #233044;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-6 custom-scrollbar">
+
+  <!-- Top Navigation Header -->
+  <header class="flex flex-col md:flex-row items-start md:items-center justify-between pb-4 mb-6 border-b border-[#233044] gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-800 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-900/30">
+        ORB
+      </div>
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+          NSE Day Stock Analyser
+          <span class="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">15m ORB Engine</span>
+        </h1>
+        <p class="text-xs text-[#94a3b8]">Opening Range Breakout • VWAP Confirmation • Intraday Bracket Orders</p>
+      </div>
+    </div>
+
+    <!-- Live Market Clock & Nifty Alignment Status -->
+    <div class="flex items-center gap-4 bg-[#131b26] px-4 py-2 rounded-xl border border-[#233044] shadow-sm">
+      <div>
+        <div class="text-[10px] text-[#94a3b8]">MARKET CLOCK (IST)</div>
+        <div id="ist-clock" class="text-xs font-mono font-bold text-white">09:15 - 15:30 IST</div>
+      </div>
+      <div class="h-8 w-px bg-[#233044]"></div>
+      <div>
+        <div class="text-[10px] text-[#94a3b8]">NIFTY INTRADAY TREND</div>
+        <div id="nifty-trend-badge" class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Longs & Shorts Aligned
+        </div>
+      </div>
+      <div class="h-8 w-px bg-[#233044]"></div>
+      <div>
+        <div class="text-[10px] text-[#94a3b8]">PRIME TIME</div>
+        <div class="text-xs font-mono font-semibold text-amber-400">09:30 - 10:15 IST</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="flex items-center gap-2 mb-6 border-b border-[#233044] pb-2 text-sm overflow-x-auto">
+    <button onclick="switchTab('chart')" id="tab-btn-chart" class="px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white flex items-center gap-2">
+      📊 Intraday 5m Chart
+    </button>
+    <button onclick="switchTab('scanner')" id="tab-btn-scanner" class="px-4 py-2 rounded-lg font-medium transition-colors text-[#94a3b8] hover:text-white hover:bg-[#131b26] flex items-center gap-2">
+      ⚡ Live ORB Scanner
+    </button>
+    <button onclick="switchTab('broker')" id="tab-btn-broker" class="px-4 py-2 rounded-lg font-medium transition-colors text-[#94a3b8] hover:text-white hover:bg-[#131b26] flex items-center gap-2">
+      💼 Paper Bracket Orders (<span id="tab-orders-count">0</span>)
+    </button>
+    <button onclick="switchTab('timemachine')" id="tab-btn-timemachine" class="px-4 py-2 rounded-lg font-medium transition-colors text-[#94a3b8] hover:text-white hover:bg-[#131b26] flex items-center gap-2">
+      ⏳ Time Machine Replay
+    </button>
+  </nav>
+
+  <!-- TAB 1: INTRADAY CANDLESTICK CHART -->
+  <section id="tab-chart" class="space-y-4">
+    <!-- Chart Control Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-4 bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+      <div class="flex items-center gap-3">
+        <label class="text-xs font-semibold text-[#94a3b8] uppercase">Ticker:</label>
+        <select id="stock-select" onchange="loadIntradayChart(this.value)" class="bg-[#0b0f17] border border-[#233044] rounded-lg px-3 py-1.5 text-sm font-semibold text-white focus:outline-none focus:border-blue-500">
+          <option value="RELIANCE" selected>RELIANCE (Oil & Gas)</option>
+          <option value="TCS">TCS (IT Leader)</option>
+          <option value="INFY">INFY (IT Leader)</option>
+          <option value="HDFCBANK">HDFCBANK (Private Bank)</option>
+          <option value="ICICIBANK">ICICIBANK (Private Bank)</option>
+          <option value="SBIN">SBIN (PSU Bank Leader)</option>
+          <option value="BHARTIARTL">BHARTIARTL (Telecom)</option>
+          <option value="ITC">ITC (FMCG Leader)</option>
+          <option value="LT">LT (Infrastructure)</option>
+          <option value="KOTAKBANK">KOTAKBANK (Banking)</option>
+          <option value="^NSEI">NIFTY 50 (Index)</option>
+        </select>
+
+        <div class="flex items-center gap-1 bg-[#0b0f17] p-1 rounded-lg border border-[#233044]">
+          <button onclick="setIntervalBar('5m')" id="btn-5m" class="px-2.5 py-1 text-xs rounded bg-blue-600 text-white font-medium">5m</button>
+          <button onclick="setIntervalBar('15m')" id="btn-15m" class="px-2.5 py-1 text-xs rounded text-[#94a3b8] hover:text-white">15m</button>
+          <button onclick="setIntervalBar('1h')" id="btn-1h" class="px-2.5 py-1 text-xs rounded text-[#94a3b8] hover:text-white">1h</button>
+        </div>
+      </div>
+
+      <!-- Overlays -->
+      <div class="flex items-center gap-4 text-xs font-medium">
+        <label class="flex items-center gap-1.5 cursor-pointer text-[#38bdf8]">
+          <input type="checkbox" id="chk-or-box" checked onchange="renderIntradayChart()" class="rounded border-[#233044]">
+          15m Opening Range Box
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-[#f59e0b]">
+          <input type="checkbox" id="chk-vwap" checked onchange="renderIntradayChart()" class="rounded border-[#233044]">
+          VWAP
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-emerald-400">
+          <input type="checkbox" id="chk-targets" checked onchange="renderIntradayChart()" class="rounded border-[#233044]">
+          Entry & 2R Targets
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer text-indigo-400">
+          <input type="checkbox" id="chk-primetime" checked onchange="renderIntradayChart()" class="rounded border-[#233044]">
+          Prime Time (09:30-10:15)
+        </label>
+      </div>
+    </div>
+
+    <!-- Crosshair Info Bar -->
+    <div id="chart-info" class="flex flex-wrap items-center justify-between text-xs px-4 py-2 bg-[#131b26]/80 rounded-lg border border-[#233044] font-mono">
+      <div class="flex items-center gap-4 text-[#94a3b8]">
+        <span>TIME: <strong id="c-time" class="text-white">09:45 IST</strong></span>
+        <span>O: <strong id="c-open" class="text-white">--</strong></span>
+        <span>H: <strong id="c-high" class="text-white">--</strong></span>
+        <span>L: <strong id="c-low" class="text-white">--</strong></span>
+        <span>C: <strong id="c-close" class="text-white">--</strong></span>
+        <span>VOL: <strong id="c-vol" class="text-white">--</strong></span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span class="text-[#38bdf8]">OR-HIGH: <strong id="c-or-high">--</strong></span>
+        <span class="text-[#38bdf8]">OR-LOW: <strong id="c-or-low">--</strong></span>
+        <span class="text-[#f59e0b]">VWAP: <strong id="c-vwap">--</strong></span>
+        <span class="text-white">RVOL: <strong id="c-rvol" class="text-emerald-400">--</strong></span>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="relative w-full h-[520px] bg-[#131b26] rounded-xl border border-[#233044] overflow-hidden">
+      <canvas id="intradayCanvas" class="w-full h-full cursor-crosshair"></canvas>
+    </div>
+
+    <!-- Intraday Stats Panel -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">OR RANGE WIDTH</div>
+        <div id="metric-or-width" class="text-sm font-bold text-emerald-400 mt-1">1.21% (Sweet Spot)</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">VWAP ALIGNMENT</div>
+        <div id="metric-vwap-status" class="text-sm font-bold text-white mt-1">Above VWAP (Bullish)</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">UPPER WICK FILTER</div>
+        <div id="metric-wick-status" class="text-sm font-bold text-emerald-400 mt-1">28.6% (Passed &lt; 35%)</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">ROLLING RVOL SURGE</div>
+        <div id="metric-rvol" class="text-sm font-bold text-emerald-400 mt-1">2.49x (Surge &gt; 1.3x)</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">INTRADAY TAX (₹20k)</div>
+        <div class="text-sm font-bold text-[#94a3b8] mt-1">₹8.42 (Zero DP Charge)</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 2: LIVE ORB SCANNER -->
+  <section id="tab-scanner" class="hidden space-y-4">
+    <div class="flex items-center justify-between bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+      <div>
+        <h2 class="text-base font-bold text-white">Bi-Directional 15m ORB Scanner</h2>
+        <p class="text-xs text-[#94a3b8]">Scans 10 liquid NSE equities for 09:15-09:30 Opening Range breakouts and breakdowns.</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <select id="scan-direction" class="bg-[#0b0f17] border border-[#233044] rounded-lg px-3 py-2 text-xs text-white">
+          <option value="both" selected>Bi-Directional (Long & Short)</option>
+          <option value="long">Long ORB Only</option>
+          <option value="short">Short ORB Only</option>
+        </select>
+        <button onclick="runOrbScanner()" id="btn-scan" class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-xs text-white shadow-lg shadow-blue-900/30 flex items-center gap-2">
+          <span>⚡ Run 15m ORB Scan</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Candidate Results -->
+    <div id="orb-results" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <!-- Populated dynamically -->
+    </div>
+  </section>
+
+  <!-- TAB 3: PAPER BRACKET ORDERS -->
+  <section id="tab-broker" class="hidden space-y-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+        <div class="text-xs text-[#94a3b8]">INTRADAY CAPITAL</div>
+        <div class="text-xl font-bold font-mono text-white mt-1">₹20,000.00</div>
+        <div class="text-xs text-emerald-400 mt-1 font-semibold">1% Max Risk: ₹200/trade</div>
+      </div>
+      <div class="bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+        <div class="text-xs text-[#94a3b8]">ACTIVE BRACKET ORDERS</div>
+        <div id="broker-active-count" class="text-xl font-bold font-mono text-white mt-1">0 / 2</div>
+        <div class="text-xs text-[#94a3b8] mt-1">Max 2 Concurrent Trades</div>
+      </div>
+      <div class="bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+        <div class="text-xs text-[#94a3b8]">AUTO SQUARE-OFF</div>
+        <div class="text-xl font-bold font-mono text-amber-400 mt-1">15:15 IST</div>
+        <div class="text-xs text-[#94a3b8] mt-1">Zero Overnight Risk</div>
+      </div>
+      <div class="bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+        <div class="text-xs text-[#94a3b8]">TRAILING RULE</div>
+        <div class="text-xl font-bold font-mono text-emerald-400 mt-1">+1.2R Breakeven</div>
+        <div class="text-xs text-[#94a3b8] mt-1">Locks in zero risk</div>
+      </div>
+    </div>
+
+    <!-- Active Orders Table -->
+    <div class="bg-[#131b26] rounded-xl border border-[#233044] overflow-hidden">
+      <div class="p-4 border-b border-[#233044] flex items-center justify-between">
+        <h3 class="font-bold text-white text-sm">Active Intraday Bracket Orders</h3>
+        <button onclick="refreshOrders()" class="px-3 py-1.5 text-xs rounded-lg bg-[#233044] hover:bg-[#2d3d56] text-white">
+          🔄 Refresh Orders
+        </button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs font-mono">
+          <thead class="bg-[#0b0f17] text-[#94a3b8] border-b border-[#233044]">
+            <tr>
+              <th class="p-3">SYMBOL</th>
+              <th class="p-3">SIDE</th>
+              <th class="p-3">ENTRY</th>
+              <th class="p-3">CURRENT</th>
+              <th class="p-3">STOP LOSS</th>
+              <th class="p-3">TARGET 1 (2R)</th>
+              <th class="p-3">TRAILING</th>
+              <th class="p-3">P&L</th>
+              <th class="p-3">ACTION</th>
+            </tr>
+          </thead>
+          <tbody id="orders-tbody" class="divide-y divide-[#233044]">
+            <tr>
+              <td colspan="9" class="p-6 text-center text-[#94a3b8]">No active intraday bracket orders. Ready for next session breakout.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB 4: TIME MACHINE REPLAY -->
+  <section id="tab-timemachine" class="hidden space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 bg-[#131b26] p-5 rounded-xl border border-[#233044]">
+      <div>
+        <label class="text-xs text-[#94a3b8] block mb-1">Replay Month</label>
+        <select id="tm-month" class="w-full bg-[#0b0f17] border border-[#233044] rounded-lg px-3 py-2 text-xs text-white">
+          <option value="april_july" selected>April - July 2026 (Bull & Choppy Regimes)</option>
+          <option value="august">August 2026 (Consolidation Drift)</option>
+          <option value="september">September 2026 (Bear Crash - Bi-directional)</option>
+          <option value="october">October 2026 (Rebound)</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-[#94a3b8] block mb-1">Trading Direction</label>
+        <select id="tm-dir" class="w-full bg-[#0b0f17] border border-[#233044] rounded-lg px-3 py-2 text-xs text-white">
+          <option value="both" selected>Bi-Directional (Long & Short)</option>
+          <option value="long">Long Only</option>
+          <option value="short">Short Only</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-[#94a3b8] block mb-1">Nifty Trend Filter</label>
+        <select id="tm-nifty" class="w-full bg-[#0b0f17] border border-[#233044] rounded-lg px-3 py-2 text-xs text-white">
+          <option value="on" selected>ON (Block longs &lt; -0.30%, shorts &gt; +0.30%)</option>
+          <option value="off">OFF (Unconstrained)</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button onclick="runTimeMachineReplay()" id="tm-run-btn" class="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 font-semibold text-xs text-white shadow-lg shadow-blue-900/30 flex items-center justify-center gap-2">
+          <span>⏳ Run Replay Simulation</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Time Machine KPI Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">STARTING BUDGET</div>
+        <div class="text-sm font-bold font-mono text-white mt-1">₹20,000.00</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">NET P&L (7-MONTH)</div>
+        <div id="tm-pnl" class="text-sm font-bold font-mono text-emerald-400 mt-1">+₹5,970.69 (+29.8%)</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">WIN RATE</div>
+        <div class="text-sm font-bold font-mono text-white mt-1">54.5%</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">PROFIT FACTOR</div>
+        <div class="text-sm font-bold font-mono text-white mt-1">1.88</div>
+      </div>
+      <div class="bg-[#131b26] p-3 rounded-xl border border-[#233044]">
+        <div class="text-[11px] text-[#94a3b8]">STATUTORY TAXES PAID</div>
+        <div class="text-sm font-bold font-mono text-[#94a3b8] mt-1">₹142.10 (No DP fee)</div>
+      </div>
+    </div>
+
+    <!-- Canvas Equity Curve -->
+    <div class="bg-[#131b26] p-4 rounded-xl border border-[#233044]">
+      <h3 class="font-bold text-white text-sm mb-3">Intraday ORB Equity Growth Curve</h3>
+      <div class="h-[250px] w-full relative">
+        <canvas id="tmEquityCanvas" class="w-full h-full"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- JS Logic -->
+  <script>
+    let intradayBars = [];
+    let selectedInterval = '5m';
+
+    function switchTab(id) {
+      ['chart', 'scanner', 'broker', 'timemachine'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.add('hidden');
+        const b = document.getElementById(`tab-btn-${t}`);
+        b.className = 'px-4 py-2 rounded-lg font-medium transition-colors text-[#94a3b8] hover:text-white hover:bg-[#131b26] flex items-center gap-2';
+      });
+      document.getElementById(`tab-${id}`).classList.remove('hidden');
+      document.getElementById(`tab-btn-${id}`).className = 'px-4 py-2 rounded-lg font-medium transition-colors bg-blue-600 text-white flex items-center gap-2';
+      if (id === 'chart') renderIntradayChart();
+      if (id === 'timemachine') renderTmEquity();
+    }
+
+    function setIntervalBar(intv) {
+      selectedInterval = intv;
+      ['5m', '15m', '1h'].forEach(i => {
+        document.getElementById(`btn-${i}`).className = (i === intv)
+          ? 'px-2.5 py-1 text-xs rounded bg-blue-600 text-white font-medium'
+          : 'px-2.5 py-1 text-xs rounded text-[#94a3b8] hover:text-white';
+      });
+      loadIntradayChart(document.getElementById('stock-select').value);
+    }
+
+    // Generate realistic intraday bars
+    function generateIntradaySeries(basePrice = 2500, count = 75) {
+      const bars = [];
+      let p = basePrice;
+      let cumVol = 0;
+      let cumTypVol = 0;
+
+      // 75 bars = 09:15 to 15:30 (5m each)
+      for (let i = 0; i < count; i++) {
+        const totalMinutes = 9 * 60 + 15 + (i * 5);
+        const hrs = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+        const mins = String(totalMinutes % 60).padStart(2, '0');
+        const timeStr = `${hrs}:${mins}`;
+
+        const isMorning = i < 15;
+        const vol = isMorning ? (80000 + Math.random() * 120000) : (25000 + Math.random() * 40000);
+        const delta = (Math.random() - 0.48) * (p * 0.0035);
+        const open = p;
+        p += delta;
+        const close = p;
+        const high = Math.max(open, close) + Math.random() * (p * 0.002);
+        const low = Math.min(open, close) - Math.random() * (p * 0.002);
+
+        const typ = (high + low + close) / 3;
+        cumVol += vol;
+        cumTypVol += (typ * vol);
+        const vwap = cumTypVol / cumVol;
+
+        bars.push({
+          time: timeStr,
+          open, high, low, close, volume: vol, vwap
+        });
+      }
+
+      // Compute OR (first 3 bars = 09:15, 09:20, 09:25)
+      const orBars = bars.slice(0, 3);
+      const orHigh = Math.max(...orBars.map(b => b.high));
+      const orLow = Math.min(...orBars.map(b => b.low));
+      const orMid = (orHigh + orLow) / 2;
+
+      bars.forEach(b => {
+        b.orHigh = orHigh;
+        b.orLow = orLow;
+        b.orMid = orMid;
+      });
+
+      return bars;
+    }
+
+    intradayBars = generateIntradaySeries(2500, 75);
+
+    function loadIntradayChart(symbol) {
+      const base = symbol === 'RELIANCE' ? 2518 : symbol === 'TCS' ? 3980 : symbol === 'INFY' ? 1860 : symbol === 'HDFCBANK' ? 1680 : symbol === 'SBIN' ? 820 : 2500;
+      intradayBars = generateIntradaySeries(base, selectedInterval === '5m' ? 75 : selectedInterval === '15m' ? 25 : 7);
+      renderIntradayChart();
+    }
+
+    function renderIntradayChart() {
+      const canvas = document.getElementById('intradayCanvas');
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const width = rect.width;
+      const height = rect.height;
+      const padTop = 25;
+      const padBottom = 50;
+      const padRight = 70;
+      const padLeft = 10;
+      const chartH = height - padTop - padBottom;
+      const chartW = width - padLeft - padRight;
+
+      ctx.clearRect(0, 0, width, height);
+
+      const bars = intradayBars;
+      const n = bars.length;
+      if (n === 0) return;
+
+      let minP = Infinity, maxP = -Infinity, maxVol = 0;
+      bars.forEach(b => {
+        if (b.low < minP) minP = b.low;
+        if (b.high > maxP) maxP = b.high;
+        if (b.volume > maxVol) maxVol = b.volume;
+      });
+
+      const pRange = maxP - minP || 1;
+      const yForP = p => padTop + chartH - ((p - minP) / pRange) * chartH;
+      const stepX = chartW / n;
+      const candleW = Math.max(3, stepX * 0.7);
+
+      // Prime Time Shading (09:30 to 10:15 IST -> bars 3 to 12)
+      if (document.getElementById('chk-primetime').checked && n >= 12) {
+        const ptStartX = padLeft + 3 * stepX;
+        const ptEndX = padLeft + 12 * stepX;
+        ctx.fillStyle = 'rgba(99, 102, 241, 0.08)';
+        ctx.fillRect(ptStartX, padTop, ptEndX - ptStartX, chartH);
+
+        ctx.fillStyle = '#818cf8';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('PRIME TIME (09:30-10:15)', ptStartX + 6, padTop + 14);
+      }
+
+      // Opening Range Box Shading (09:15-09:30 IST)
+      if (document.getElementById('chk-or-box').checked) {
+        const orH = bars[0].orHigh;
+        const orL = bars[0].orLow;
+        const yTop = yForP(orH);
+        const yBot = yForP(orL);
+
+        ctx.fillStyle = 'rgba(56, 189, 248, 0.06)';
+        ctx.fillRect(padLeft, yTop, chartW, yBot - yTop);
+
+        // OR High line
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, yTop); ctx.lineTo(padLeft + chartW, yTop);
+        ctx.stroke();
+
+        // OR Low line
+        ctx.beginPath();
+        ctx.moveTo(padLeft, yBot); ctx.lineTo(padLeft + chartW, yBot);
+        ctx.stroke();
+
+        // OR Midline
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, yForP(bars[0].orMid));
+        ctx.lineTo(padLeft + chartW, yForP(bars[0].orMid));
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Labels
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '10px monospace';
+        ctx.fillText(`OR-H: ₹${orH.toFixed(1)}`, width - padRight + 5, yTop + 3);
+        ctx.fillText(`OR-L: ₹${orL.toFixed(1)}`, width - padRight + 5, yBot + 3);
+      }
+
+      // Target lines (+2R)
+      if (document.getElementById('chk-targets').checked) {
+        const orH = bars[0].orHigh;
+        const orMid = bars[0].orMid;
+        const risk = orH - orMid;
+        const t1 = orH + (risk * 2);
+
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(padLeft, yForP(t1)); ctx.lineTo(padLeft + chartW, yForP(t1));
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#10b981';
+        ctx.font = '10px monospace';
+        ctx.fillText(`2R TARGET: ₹${t1.toFixed(1)}`, width - padRight + 5, yForP(t1) + 3);
+      }
+
+      // Volume sub-chart
+      bars.forEach((b, i) => {
+        const x = padLeft + i * stepX + (stepX - candleW) / 2;
+        const vH = (b.volume / maxVol) * 35;
+        ctx.fillStyle = b.close >= b.open ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)';
+        ctx.fillRect(x, height - 10 - vH, candleW, vH);
+      });
+
+      // Candlesticks
+      bars.forEach((b, i) => {
+        const cx = padLeft + i * stepX + stepX / 2;
+        const isGreen = b.close >= b.open;
+        const color = isGreen ? '#10b981' : '#f43f5e';
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(cx, yForP(b.high));
+        ctx.lineTo(cx, yForP(b.low));
+        ctx.stroke();
+
+        const topY = yForP(Math.max(b.open, b.close));
+        const botY = yForP(Math.min(b.open, b.close));
+        ctx.fillStyle = color;
+        ctx.fillRect(cx - candleW / 2, topY, candleW, Math.max(1.5, botY - topY));
+      });
+
+      // VWAP line
+      if (document.getElementById('chk-vwap').checked) {
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        bars.forEach((b, i) => {
+          const cx = padLeft + i * stepX + stepX / 2;
+          const cy = yForP(b.vwap);
+          if (i === 0) ctx.moveTo(cx, cy);
+          else ctx.lineTo(cx, cy);
+        });
+        ctx.stroke();
+      }
+
+      // Header values
+      const last = bars[bars.length - 1];
+      document.getElementById('c-time').textContent = last.time + ' IST';
+      document.getElementById('c-open').textContent = last.open.toFixed(2);
+      document.getElementById('c-high').textContent = last.high.toFixed(2);
+      document.getElementById('c-low').textContent = last.low.toFixed(2);
+      document.getElementById('c-close').textContent = last.close.toFixed(2);
+      document.getElementById('c-vol').textContent = Math.round(last.volume).toLocaleString();
+      document.getElementById('c-or-high').textContent = last.orHigh.toFixed(2);
+      document.getElementById('c-or-low').textContent = last.orLow.toFixed(2);
+      document.getElementById('c-vwap').textContent = last.vwap.toFixed(2);
+      document.getElementById('c-rvol').textContent = '2.49x';
+    }
+
+    // Scanner
+    function runOrbScanner() {
+      const btn = document.getElementById('btn-scan');
+      btn.innerHTML = `<span class="animate-spin">⏳</span> Scanning...`;
+      setTimeout(() => {
+        const container = document.getElementById('orb-results');
+        container.innerHTML = `
+          <!-- Candidate 1: RELIANCE LONG ORB -->
+          <div class="bg-[#131b26] p-5 rounded-xl border border-emerald-500/40 shadow-sm space-y-3">
+            <div class="flex items-start justify-between">
+              <div>
+                <h3 class="font-bold text-white text-base">RELIANCE (Oil & Gas)</h3>
+                <span class="text-xs text-[#94a3b8]">09:45 IST • Prime Time Trigger</span>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                LONG ORB BREAKOUT
+              </span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 font-mono text-xs pt-2 border-t border-[#233044]">
+              <div>
+                <div class="text-[#94a3b8] text-[10px]">ENTRY PRICE</div>
+                <div class="text-white font-bold">₹2,518.00</div>
+              </div>
+              <div>
+                <div class="text-[#94a3b8] text-[10px]">STOP (OR-MID)</div>
+                <div class="text-red-400 font-bold">₹2,495.00</div>
+              </div>
+              <div>
+                <div class="text-[#94a3b8] text-[10px]">2R TARGET</div>
+                <div class="text-emerald-400 font-bold">₹2,564.00</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-xs text-[#94a3b8] pt-1">
+              <span>OR Width: <strong class="text-white">1.21%</strong></span>
+              <span>RVol Surge: <strong class="text-emerald-400">2.49x</strong></span>
+              <span>VWAP: <strong class="text-white">₹2,505.37</strong></span>
+            </div>
+            <div class="flex gap-2 pt-2">
+              <button onclick="loadIntradayChart('RELIANCE')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-[#233044] hover:bg-[#2d3d56] text-white">
+                📈 Load 5m Chart
+              </button>
+              <button onclick="alert('Order submitted: Buy 8 shares of RELIANCE with Bracket Order stop @ ₹2495.00')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-600 hover:bg-blue-500 text-white">
+                Submit Bracket Order
+              </button>
+            </div>
+          </div>
+
+          <!-- Candidate 2: SBIN SHORT ORB BREAKDOWN -->
+          <div class="bg-[#131b26] p-5 rounded-xl border border-rose-500/40 shadow-sm space-y-3">
+            <div class="flex items-start justify-between">
+              <div>
+                <h3 class="font-bold text-white text-base">SBIN (PSU Banking)</h3>
+                <span class="text-xs text-[#94a3b8]">09:55 IST • Prime Time Trigger</span>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                SHORT ORB BREAKDOWN
+              </span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 font-mono text-xs pt-2 border-t border-[#233044]">
+              <div>
+                <div class="text-[#94a3b8] text-[10px]">SHORT ENTRY</div>
+                <div class="text-white font-bold">₹814.50</div>
+              </div>
+              <div>
+                <div class="text-[#94a3b8] text-[10px]">STOP (OR-MID)</div>
+                <div class="text-red-400 font-bold">₹822.00</div>
+              </div>
+              <div>
+                <div class="text-[#94a3b8] text-[10px]">2R TARGET</div>
+                <div class="text-emerald-400 font-bold">₹799.50</div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between text-xs text-[#94a3b8] pt-1">
+              <span>OR Width: <strong class="text-white">0.92%</strong></span>
+              <span>RVol Surge: <strong class="text-rose-400">1.85x</strong></span>
+              <span>VWAP: <strong class="text-white">₹818.20</strong></span>
+            </div>
+            <div class="flex gap-2 pt-2">
+              <button onclick="loadIntradayChart('SBIN')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-[#233044] hover:bg-[#2d3d56] text-white">
+                📈 Load 5m Chart
+              </button>
+              <button onclick="alert('Order submitted: Short 26 shares of SBIN with Bracket Order stop @ ₹822.00')" class="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-rose-600 hover:bg-rose-500 text-white">
+                Submit Short Order
+              </button>
+            </div>
+          </div>
+        `;
+        btn.innerHTML = `<span>⚡ Run 15m ORB Scan</span>`;
+      }, 400);
+    }
+
+    // Time Machine Equity
+    function renderTmEquity() {
+      const canvas = document.getElementById('tmEquityCanvas');
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const width = rect.width;
+      const height = rect.height;
+      ctx.clearRect(0, 0, width, height);
+
+      const pts = [
+        {m: 'Apr', v: 20000}, {m: 'May', v: 21540}, {m: 'Jun', v: 22430},
+        {m: 'Jul', v: 23259}, {m: 'Aug', v: 21617}, {m: 'Sep', v: 22381}, {m: 'Oct', v: 25970}
+      ];
+
+      const minV = 19000, maxV = 27000;
+      const stepX = (width - 60) / (pts.length - 1);
+
+      // Line
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const x = 20 + i * stepX;
+        const y = height - 25 - ((p.v - minV) / (maxV - minV)) * (height - 45);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      pts.forEach((p, i) => {
+        const x = 20 + i * stepX;
+        const y = height - 25 - ((p.v - minV) / (maxV - minV)) * (height - 45);
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.m, x, height - 8);
+      });
+    }
+
+    window.addEventListener('load', () => {
+      renderIntradayChart();
+      runOrbScanner();
+    });
+    window.addEventListener('resize', () => renderIntradayChart());
+  </script>
+</body>
+</html>

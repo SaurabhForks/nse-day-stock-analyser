@@ -116,9 +116,24 @@ python3 -m unittest discover -s tests -v
 
 **Taxes & Statutory Fees.** Equity intraday trading attracts STT (0.025% on sell side), exchange turnover fees, SEBI turnover fees, State Stamp Duty, and 18% GST on brokerage. All these are factored into `/trader-budget`.
 
+## Interactive Web UI & Live Intraday Chart View
+
+Run the built-in standard-library Web UI server (port 8502):
+
+```bash
+python3 trader-ui/server.py --port 8502
+```
+
+Open **`http://localhost:8502`** (or `http://127.0.0.1:8502`) in your browser to access:
+- 📊 **Intraday 5m & 15m Candlestick Chart**: Interactive candlesticks with Opening Range (OR) box overlays (09:15-09:30 IST), dynamic VWAP line, 2R target lines, and rolling RVol volume sub-chart.
+- ⚡ **Bi-Directional ORB Scanner**: Real-time Long Breakouts & Short Breakdowns with instant chart plotting.
+- 💼 **Bracket Order Paper Broker**: Real-time intraday positions, trailing stops, and 15:15 IST auto-square-off alert.
+- ⏳ **Time Machine Replay Simulator**: 7-month historical replay across bull, bear, and choppy regimes.
+
 ## Files
 
 ```
+trader-ui/          server.py, static/index.html, README.md
 trader-scanner/     SKILL.md, scan.py
 trader-news/        SKILL.md, news.py
 trader-entry/       SKILL.md, entry.py
