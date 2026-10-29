@@ -32,10 +32,13 @@ python3 "${CLAUDE_SKILL_DIR}/entry.py" watchlist                             # c
 
 Flags: `--setup orb` (default) or `level`, `--level PRICE`, `--or-minutes 15`,
 `--min-volume-x 1.0`, `--rvol-mult 1.0`, `--min-or-width 0.4`, `--max-or-width 2.0`,
+`--min-close-pos 0.65`, `--max-upper-wick 0.35`, `--until 10:15` (Prime Time Window),
 `--require-vwap` (default enabled), `--no-vwap`, `--interval 5m`,
 `--now "YYYY-MM-DD HH:MM IST"`, `--offline FILE`, `--write`.
 
 ## Accuracy Improvements
+- **Prime Time Window (09:30 - 10:15 IST)**: Enforces entry execution during the morning institutional order flow, blocking midday chop traps.
+- **Upper Wick / Seller Rejection Filter**: Rejects breakout bars with > 35% upper wicks or closes in the lower 35% of the candle.
 - **Intraday VWAP Filter**: Blocks ORB long triggers if the candle closes below the cumulative session VWAP.
 - **Range Width Filter**: Only trades ranges between 0.4% and 2.0% width (avoids illiquid chops < 0.4% and exhausted ranges > 2.0%).
 - **Rolling RVol Surge**: Evaluates breakout bar volume against the preceding 5-bar rolling average.
@@ -45,11 +48,11 @@ Flags: `--setup orb` (default) or `level`, `--level PRICE`, `--or-minutes 15`,
 | file | what |
 | --- | --- |
 | `trader/watchlist.json` | read by `watchlist`: candidates to check |
-| `trader/config.json` | read: `no_entries_before` (09:30), `no_entries_after` (14:45), filter rules |
-| `trader/entry.json` | written when triggered: contains `symbol`, `entry_price`, `trigger_time`, `or_high`, `or_low`, `or_width_pct`, `vwap`, `rvol` |
+| `trader/config.json` | read: `no_entries_before` (09:30), `no_entries_after` (10:15), filter rules |
+| `trader/entry.json` | written when triggered: contains `symbol`, `entry_price`, `trigger_time`, `or_high`, `or_low`, `or_width_pct`, `close_pos_pct`, `upper_wick_pct`, `vwap`, `rvol` |
 
 ## Statuses
 - `triggered`: A candle has completed and closed above the range high / level.
 - `waiting`: Range is still forming or price is trading within the range.
-- `expired`: Time passed `no_entries_after` (14:45 IST) without a breakout.
+- `expired`: Time passed `no_entries_after` (10:15 IST) without a breakout.
 - `no-data`: Market closed, weekend, or holiday.

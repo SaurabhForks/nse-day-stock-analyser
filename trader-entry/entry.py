@@ -37,7 +37,7 @@ GRACE = 2
 SETTLE = 60
 YAHOO_HOSTS = ("query2", "query1")
 INTERVALS = {"1m": 60, "5m": 300}
-DEFAULTS = {"no_entries_before": "09:30", "no_entries_after": "14:45"}
+DEFAULTS = {"no_entries_before": "09:30", "no_entries_after": "10:15"}
 
 NSE_HOLIDAYS = {
     "2026-01-26": "Republic Day",
@@ -198,7 +198,8 @@ def compute_vwap(bars):
 
 def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol_x=1.0,
                    rvol_mult=1.0, min_or_width_pct=0.4, max_or_width_pct=2.0,
-                   require_vwap=True, window_start="09:30", window_end="14:45"):
+                   min_close_pos=0.65, max_upper_wick=0.35,
+                   require_vwap=True, window_start="09:30", window_end="10:15"):
     """Evaluate whether an entry triggered."""
     if not bars:
         return {"status": "no-data", "reason": "no closed bars available"}
@@ -259,6 +260,15 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                 if require_vwap and vwap is not None and b["close"] < vwap:
                     continue
 
+                # 4. Trigger candle quality & upper wick rejection check
+                c_rng = b["high"] - b["low"]
+                c_pos = ((b["close"] - b["low"]) / c_rng) if c_rng > 0 else 1.0
+                u_wick = ((b["high"] - max(b["close"], b.get("open", b["close"]))) / c_rng) if c_rng > 0 else 0.0
+                if min_close_pos is not None and c_pos < min_close_pos:
+                    continue
+                if max_upper_wick is not None and u_wick > max_upper_wick:
+                    continue
+
                 pct_over = ((b["close"] - or_high) / or_high) * 100.0
                 return {
                     "status": "triggered",
@@ -271,6 +281,8 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                     "or_high": round(or_high, 2),
                     "or_low": round(or_low, 2),
                     "or_width_pct": round(or_width_pct, 2),
+                    "close_pos_pct": round(c_pos * 100.0, 1),
+                    "upper_wick_pct": round(u_wick * 100.0, 1),
                     "vwap": round(vwap, 2) if vwap is not None else None,
                     "rvol": rvol,
                     "pct_over": round(pct_over, 2),
@@ -337,7 +349,7 @@ def run_check(args):
             pass
 
     w_start = cfg.get("no_entries_before", DEFAULTS["no_entries_before"])
-    w_end = cfg.get("no_entries_after", DEFAULTS["no_entries_after"])
+    w_end = getattr(args, "window_end", None) or cfg.get("no_entries_after", DEFAULTS["no_entries_after"])
 
     res = evaluate_entry(
         symbol=args.symbol,
@@ -349,6 +361,8 @@ def run_check(args):
         rvol_mult=args.rvol_mult,
         min_or_width_pct=args.min_or_width,
         max_or_width_pct=args.max_or_width,
+        min_close_pos=args.min_close_pos,
+        max_upper_wick=args.max_upper_wick,
         require_vwap=args.require_vwap,
         window_start=w_start,
         window_end=w_end,
@@ -394,6 +408,8 @@ def run_watch(args):
             rvol_mult=args.rvol_mult,
             min_or_width_pct=args.min_or_width,
             max_or_width_pct=args.max_or_width,
+            min_close_pos=args.min_close_pos,
+            max_upper_wick=args.max_upper_wick,
             require_vwap=args.require_vwap,
             window_end=args.until or DEFAULTS["no_entries_after"],
         )
@@ -440,8 +456,11 @@ def run_watchlist(args):
                 sym, bars, setup="orb", or_minutes=15,
                 min_or_width_pct=args.min_or_width,
                 max_or_width_pct=args.max_or_width,
+                min_close_pos=args.min_close_pos,
+                max_upper_wick=args.max_upper_wick,
                 require_vwap=args.require_vwap,
                 rvol_mult=args.rvol_mult,
+                window_end=args.window_end or DEFAULTS["no_entries_after"],
             )
             if res.get("status") == "triggered":
                 triggered.append(res)
@@ -473,6 +492,9 @@ def main(argv=None):
     p_c.add_argument("--rvol-mult", type=float, default=1.0, help="Volume surge multiplier vs 5-bar rolling average")
     p_c.add_argument("--min-or-width", type=float, default=0.4, help="Minimum opening range width in %% (default 0.4%%)")
     p_c.add_argument("--max-or-width", type=float, default=2.0, help="Maximum opening range width in %% (default 2.0%%)")
+    p_c.add_argument("--min-close-pos", type=float, default=0.65, help="Minimum candle close position (0.0 to 1.0, default 0.65)")
+    p_c.add_argument("--max-upper-wick", type=float, default=0.35, help="Maximum candle upper wick fraction (default 0.35)")
+    p_c.add_argument("--window-end", default=None, help="Stop entries at this IST time (default 10:15)")
     p_c.add_argument("--require-vwap", dest="require_vwap", action="store_true", default=True, help="Require price > intraday VWAP")
     p_c.add_argument("--no-vwap", dest="require_vwap", action="store_false", help="Disable VWAP filter")
     p_c.add_argument("--now", help="Simulate clock (YYYY-MM-DD HH:MM IST)")
@@ -491,10 +513,12 @@ def main(argv=None):
     p_w.add_argument("--rvol-mult", type=float, default=1.0)
     p_w.add_argument("--min-or-width", type=float, default=0.4)
     p_w.add_argument("--max-or-width", type=float, default=2.0)
+    p_w.add_argument("--min-close-pos", type=float, default=0.65)
+    p_w.add_argument("--max-upper-wick", type=float, default=0.35)
     p_w.add_argument("--require-vwap", dest="require_vwap", action="store_true", default=True)
     p_w.add_argument("--no-vwap", dest="require_vwap", action="store_false")
     p_w.add_argument("--every", type=int, default=30, help="Seconds between polls")
-    p_w.add_argument("--until", default="14:45", help="Stop polling at this IST time (default 14:45)")
+    p_w.add_argument("--until", default="10:15", help="Stop polling at this IST time (default 10:15)")
     p_w.add_argument("--now", help="Simulate clock")
     p_w.add_argument("--offline", help="Path to offline chart")
 
@@ -503,6 +527,9 @@ def main(argv=None):
     p_wl.add_argument("--min-or-width", type=float, default=0.4)
     p_wl.add_argument("--max-or-width", type=float, default=2.0)
     p_wl.add_argument("--rvol-mult", type=float, default=1.0)
+    p_wl.add_argument("--min-close-pos", type=float, default=0.65)
+    p_wl.add_argument("--max-upper-wick", type=float, default=0.35)
+    p_wl.add_argument("--window-end", default=None)
     p_wl.add_argument("--require-vwap", dest="require_vwap", action="store_true", default=True)
     p_wl.add_argument("--no-vwap", dest="require_vwap", action="store_false")
     p_wl.add_argument("--now", help="Simulate clock")

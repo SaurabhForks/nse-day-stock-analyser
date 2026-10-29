@@ -30,9 +30,9 @@ class TestExit(unittest.TestCase):
         self.assertEqual(plan["risk_per_share"], 23.00)
         self.assertEqual(plan["reward_per_share"], 46.00)
         self.assertEqual(plan["reward_risk_ratio"], 2.0)
-        self.assertEqual(plan["breakeven_trigger_price"], 2541.00)
+        self.assertEqual(plan["breakeven_trigger_price"], 2545.60)
         self.assertEqual(plan["breakeven_stop_price"], 2518.10)
-        self.assertEqual(plan["trailing_rule"], "trail_to_breakeven_at_1r")
+        self.assertEqual(plan["trailing_rule"], "trail_to_breakeven_at_1.2r")
         self.assertEqual(plan["flat_by"], "15:15")
 
     def test_or_low_stop_and_1r_target(self):

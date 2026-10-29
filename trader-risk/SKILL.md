@@ -48,7 +48,7 @@ Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 1. **Capital Risk**: `max_loss_per_trade_inr` and `max_daily_loss_inr`
 2. **Stop Protection**: Mandatory stop-loss lower than entry price
 3. **Reward:Risk**: Minimum 1:1 reward-to-risk ratio
-4. **Trading Window**: Entries permitted strictly between 09:30 and 14:45 IST
+4. **Trading Window**: Entries permitted strictly during morning prime time (09:30 to 10:15 IST)
 5. **Calendar**: Closed on weekends and official NSE trading holidays
 6. **Market Trend**: Broad market filter (blocks aggressive breakout buys when Nifty 50 is trending down > 1.0%)
 7. **Integrity**: No duplicates, no options, whole shares only

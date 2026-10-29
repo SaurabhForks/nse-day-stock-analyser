@@ -142,7 +142,7 @@ def build_plan(symbol, entry_price, or_high=None, or_low=None, stop_rule="or-mid
     reward_risk_ratio = float(reward_per_share / risk_per_share)
 
     today = date_str or datetime.date.today().isoformat()
-    be_trigger = round_tick(entry + risk_per_share, ROUND_HALF_UP)
+    be_trigger = round_tick(entry + (Decimal("1.2") * risk_per_share), ROUND_HALF_UP)
     be_stop = round_tick(entry + Decimal("0.10"), ROUND_HALF_UP)
 
     return {
@@ -157,7 +157,7 @@ def build_plan(symbol, entry_price, or_high=None, or_low=None, stop_rule="or-mid
         "reward_risk_ratio": round(reward_risk_ratio, 2),
         "breakeven_trigger_price": float(be_trigger),
         "breakeven_stop_price": float(be_stop),
-        "trailing_rule": "trail_to_breakeven_at_1r",
+        "trailing_rule": "trail_to_breakeven_at_1.2r",
         "stop_rule": stop_rule,
         "stop_reason": stop_reason,
         "target_rule": target_rule,
@@ -228,7 +228,7 @@ def run_plan(args):
             plan["target_price"], plan["target_reason"], plan["reward_per_share"], plan["reward_risk_ratio"]
         ))
         if plan.get("breakeven_trigger_price"):
-            print("  Breakeven:    Trail stop to ₹%.2f once price crosses ₹%.2f (+1R)" % (
+            print("  Breakeven:    Trail stop to ₹%.2f once price crosses ₹%.2f (+1.2R)" % (
                 plan["breakeven_stop_price"], plan["breakeven_trigger_price"]
             ))
         print("  Auto-Square:  %s IST (MIS flat by close)" % plan["flat_by"])

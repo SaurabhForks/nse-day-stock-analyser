@@ -290,7 +290,7 @@ def run_add(args):
                 "symbol": sym,
                 "price": float(be_trig),
                 "date": date_str,
-                "label": "1R reached: trail stop-loss to breakeven @ ₹%.2f" % float(be_stop),
+                "label": "1.2R reached: trail stop-loss to breakeven @ ₹%.2f" % float(be_stop),
                 "active": True,
             })
         new_rules.append({

@@ -32,7 +32,7 @@ DEFAULTS = {
     "min_reward_risk": 1.0,
     "require_stop": True,
     "no_entries_before": "09:30",
-    "no_entries_after": "14:45",
+    "no_entries_after": "10:15",
     "flat_by": "15:15",
     "intraday_leverage": 5.0,
     "paper": True,

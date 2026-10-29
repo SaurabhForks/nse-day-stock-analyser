@@ -82,13 +82,35 @@ class TestEntry(unittest.TestCase):
             {"ist_time": "09:30", "date": "2026-10-19", "high": 2530.0, "low": 2505.0, "close": 2512.0, "volume": 200000},
         ]
         # With require_vwap=True (default), close 2512 < VWAP 2514.4 -> blocked/waiting
-        res_blocked = mod.evaluate_entry("RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15, require_vwap=True)
+        res_blocked = mod.evaluate_entry(
+            "RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15,
+            require_vwap=True, min_close_pos=0.0, max_upper_wick=1.0
+        )
         self.assertEqual(res_blocked["status"], "waiting")
 
         # With require_vwap=False, it triggers because close 2512 > or_high 2510
-        res_allowed = mod.evaluate_entry("RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15, require_vwap=False)
+        res_allowed = mod.evaluate_entry(
+            "RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15,
+            require_vwap=False, min_close_pos=0.0, max_upper_wick=1.0
+        )
         self.assertEqual(res_allowed["status"], "triggered")
         self.assertEqual(res_allowed["entry_price"], 2512.0)
+
+    def test_candle_upper_wick_filter(self):
+        # Bar 3 has 72% upper wick (long rejection shadow)
+        wick_rejection_bars = [
+            {"ist_time": "09:15", "date": "2026-10-19", "high": 2505.0, "low": 2490.0, "close": 2500.0, "volume": 10000},
+            {"ist_time": "09:20", "date": "2026-10-19", "high": 2510.0, "low": 2485.0, "close": 2495.0, "volume": 10000},
+            {"ist_time": "09:25", "date": "2026-10-19", "high": 2508.0, "low": 2490.0, "close": 2505.0, "volume": 10000},
+            {"ist_time": "09:30", "date": "2026-10-19", "high": 2530.0, "low": 2505.0, "close": 2512.0, "volume": 200000},
+        ]
+        # With default filter (max_upper_wick=0.35), 0.72 upper wick is rejected as waiting
+        res_rej = mod.evaluate_entry("RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15, require_vwap=False)
+        self.assertEqual(res_rej["status"], "waiting")
+
+        # With max_upper_wick=0.80, it triggers
+        res_acc = mod.evaluate_entry("RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15, require_vwap=False, min_close_pos=0.20, max_upper_wick=0.80)
+        self.assertEqual(res_acc["status"], "triggered")
 
     def test_opening_range_width_filter(self):
         # 1. Range too narrow: OR high 2500, OR low 2498 -> 2 / 2498 = 0.08% < 0.4%

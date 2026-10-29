@@ -735,7 +735,7 @@ def main(argv=None):
     p_o.add_argument("--or-minutes", type=int, default=15, help="Opening range duration in minutes (default 15)")
     p_o.add_argument("--min-or-width", type=float, default=0.4, help="Minimum opening range width in %% (default 0.4%%)")
     p_o.add_argument("--max-or-width", type=float, default=2.0, help="Maximum opening range width in %% (default 2.0%%)")
-    p_o.add_argument("--at", help="Cutoff time in HH:MM IST (e.g. 10:15)")
+    p_o.add_argument("--at", default="10:15", help="Cutoff time in HH:MM IST (default 10:15 prime time)")
     p_o.add_argument("--now", help="Simulate current time")
     p_o.add_argument("--offline", help="Offline JSON data file or directory")
     p_o.add_argument("--no-write", action="store_true", help="Do not write trader/watchlist.json")

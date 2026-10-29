@@ -21,7 +21,7 @@ class TestRisk(unittest.TestCase):
             "min_reward_risk": 1.0,
             "require_stop": True,
             "no_entries_before": "09:30",
-            "no_entries_after": "14:45",
+            "no_entries_after": "10:15",
             "blocked": ["BLOCKEDSTOCK"],
         }
         self.valid_order = {
