@@ -1,0 +1,19 @@
+{
+  "symbol": "RELIANCE",
+  "side": "buy",
+  "date": "2026-10-19",
+  "entry_price": 2518.0,
+  "stop_price": 2495.0,
+  "target_price": 2564.0,
+  "risk_per_share": 23.0,
+  "reward_per_share": 46.0,
+  "reward_risk_ratio": 2.0,
+  "stop_rule": "or-mid",
+  "stop_reason": "opening range midpoint (\u20b92480.00 - \u20b92510.00)",
+  "target_rule": "2R",
+  "target_reason": "2R reward (\u20b923.00 risk)",
+  "flat_by": "15:15",
+  "exchange": "NSE",
+  "product": "MIS",
+  "note": "A stop is a plan, not a guarantee: a gap or fast market can slip past it."
+}

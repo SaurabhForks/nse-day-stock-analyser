@@ -1,0 +1,33 @@
+{
+  "rules": [
+    {
+      "id": "reliance-stop",
+      "type": "below",
+      "symbol": "RELIANCE",
+      "price": 2480.0,
+      "label": "plan stop loss hit @ ₹2480.00",
+      "active": true
+    },
+    {
+      "id": "reliance-target",
+      "type": "above",
+      "symbol": "RELIANCE",
+      "price": 2540.0,
+      "label": "plan target hit @ ₹2540.00",
+      "active": true
+    },
+    {
+      "id": "reliance-flat",
+      "type": "time",
+      "at": "15:15",
+      "label": "MIS auto square-off time (15:15 IST)",
+      "active": true
+    },
+    {
+      "id": "nse-opening-bell",
+      "type": "opening_bell",
+      "label": "NSE Opening Bell (09:15 AM IST)",
+      "active": true
+    }
+  ]
+}

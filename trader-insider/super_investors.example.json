@@ -1,0 +1,20 @@
+{
+  "super_investors": [
+    {
+      "name": "Radhakishan Damani",
+      "holdings": ["DMART", "VSTIND", "INDIAFL", "TRENT"]
+    },
+    {
+      "name": "Ashish Kacholia",
+      "holdings": ["SAFARI", "GRAVITA", "BALAMINES", "FIVESTAR"]
+    },
+    {
+      "name": "Vijay Kedia",
+      "holdings": ["TEJASNET", "VAIBHAVGBL", "ELECON", "ATULAUTO"]
+    },
+    {
+      "name": "Rakesh Jhunjhunwala (RARE Enterprises)",
+      "holdings": ["TITAN", "TATACHEF", "TATAMOTORS", "CRISIL"]
+    }
+  ]
+}

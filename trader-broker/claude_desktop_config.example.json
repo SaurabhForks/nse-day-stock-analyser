@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "zerodha-kite": {
+      "command": "python3",
+      "args": ["-m", "zerodha_kite_mcp"],
+      "env": {
+        "KITE_API_KEY": "YOUR_ZERODHA_API_KEY",
+        "KITE_ACCESS_TOKEN": "YOUR_KITE_ACCESS_TOKEN",
+        "KITE_PAPER_TRADING": "true"
+      }
+    }
+  }
+}

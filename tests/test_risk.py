@@ -1,0 +1,119 @@
+import datetime
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _load import load
+
+mod = load("trader-risk", "check")
+
+
+class TestRisk(unittest.TestCase):
+    def setUp(self):
+        self.cfg = {
+            "budget_inr": 100000.0,
+            "max_loss_per_trade_inr": 1000.0,
+            "max_daily_loss_inr": 3000.0,
+            "max_order_inr": 100000.0,
+            "min_order_inr": 500.0,
+            "max_position_pct": 50.0,
+            "min_reward_risk": 1.0,
+            "require_stop": True,
+            "no_entries_before": "09:30",
+            "no_entries_after": "14:45",
+            "blocked": ["BLOCKEDSTOCK"],
+        }
+        self.valid_order = {
+            "symbol": "RELIANCE",
+            "side": "buy",
+            "qty": 40,
+            "entry_price": 2500.0,
+            "stop_loss_price": 2480.0,  # Risk = 20 * 40 = 800 <= 1000
+            "take_profit_price": 2540.0, # Reward = 40 * 40 = 1600 (R:R 2.0 >= 1.0)
+            "order_type": "limit",
+        }
+        # Monday 10:15 IST (valid session)
+        self.now_ist = datetime.datetime(2026, 10, 19, 10, 15, 0)
+
+    def test_valid_order_passes(self):
+        status, reasons = mod.check_order(
+            self.valid_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "PASS")
+        self.assertEqual(reasons, [])
+
+    def test_block_missing_stop(self):
+        bad_order = dict(self.valid_order)
+        bad_order["stop_loss_price"] = 0.0
+        status, reasons = mod.check_order(
+            bad_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("stop-loss is required" in r for r in reasons))
+
+    def test_block_stop_above_entry(self):
+        bad_order = dict(self.valid_order)
+        bad_order["stop_loss_price"] = 2510.0  # Above entry 2500
+        status, reasons = mod.check_order(
+            bad_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("stop-loss" in r and "above" in r for r in reasons))
+
+    def test_block_exceeding_max_loss(self):
+        bad_order = dict(self.valid_order)
+        bad_order["qty"] = 100  # Risk = 20 * 100 = 2000 > 1000 limit
+        status, reasons = mod.check_order(
+            bad_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("max loss" in r for r in reasons))
+
+    def test_block_poor_reward_risk(self):
+        bad_order = dict(self.valid_order)
+        bad_order["take_profit_price"] = 2510.0  # Reward = 10, Risk = 20 -> R:R 0.5 < 1.0
+        status, reasons = mod.check_order(
+            bad_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("reward:risk" in r for r in reasons))
+
+    def test_block_blocked_ticker(self):
+        bad_order = dict(self.valid_order)
+        bad_order["symbol"] = "BLOCKEDSTOCK"
+        status, reasons = mod.check_order(
+            bad_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("blocked list" in r for r in reasons))
+
+    def test_block_outside_trading_window(self):
+        # 14:55 IST is after 14:45 cutoff
+        late_ist = datetime.datetime(2026, 10, 19, 14, 55, 0)
+        status, reasons = mod.check_order(
+            self.valid_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=late_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("after entry window" in r for r in reasons))
+
+    def test_block_weekend_and_holiday(self):
+        # Sunday
+        weekend_ist = datetime.datetime(2026, 10, 18, 10, 15, 0)
+        status_wk, reasons_wk = mod.check_order(
+            self.valid_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=weekend_ist
+        )
+        self.assertEqual(status_wk, "BLOCK")
+        self.assertTrue(any("weekends" in r for r in reasons_wk))
+
+        # Republic Day Holiday (2026-01-26)
+        holiday_ist = datetime.datetime(2026, 1, 26, 10, 15, 0)
+        status_hol, reasons_hol = mod.check_order(
+            self.valid_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=holiday_ist
+        )
+        self.assertEqual(status_hol, "BLOCK")
+        self.assertTrue(any("closed today" in r for r in reasons_hol))
+
+
+if __name__ == "__main__":
+    unittest.main()

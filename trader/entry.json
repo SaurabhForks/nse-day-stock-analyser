@@ -1,0 +1,14 @@
+{
+  "status": "triggered",
+  "symbol": "RELIANCE",
+  "setup": "orb",
+  "date": "2026-10-19",
+  "trigger_time": "09:45 IST",
+  "trigger_bar_time": "09:45",
+  "entry_price": 2518.0,
+  "or_high": 2510.0,
+  "or_low": 2480.0,
+  "pct_over": 0.32,
+  "volume": 142000,
+  "avg_or_volume": 72666
+}

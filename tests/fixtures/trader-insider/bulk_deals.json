@@ -1,0 +1,22 @@
+{
+  "deals": [
+    {
+      "date": "2026-10-19",
+      "symbol": "RELIANCE",
+      "client_name": "MORGAN STANLEY ASIA (SINGAPORE) PTE.",
+      "deal_type": "BUY",
+      "quantity": 1250000,
+      "trade_price": 2495.5,
+      "value_cr": 311.94
+    },
+    {
+      "date": "2026-10-19",
+      "symbol": "TATAMOTORS",
+      "client_name": "SOCIETE GENERALE",
+      "deal_type": "BUY",
+      "quantity": 2100000,
+      "trade_price": 982.0,
+      "value_cr": 206.22
+    }
+  ]
+}

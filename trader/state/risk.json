@@ -1,0 +1,14 @@
+{
+  "as_of": "2026-10-19 10:15:00 IST",
+  "all_passed": true,
+  "verdicts": [
+    {
+      "fingerprint": "022ec1ce79716268",
+      "symbol": "RELIANCE",
+      "side": "buy",
+      "qty": 43,
+      "status": "PASS",
+      "reasons": []
+    }
+  ]
+}

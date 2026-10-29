@@ -1,0 +1,38 @@
+{
+  "orders": [
+    {
+      "symbol": "RELIANCE",
+      "exchange": "NSE",
+      "product": "MIS",
+      "side": "buy",
+      "qty": 43,
+      "order_type": "market",
+      "entry_price": 2518.0,
+      "limit_price": null,
+      "stop_loss_price": 2495.0,
+      "take_profit_price": 2564.0,
+      "notional_value_inr": 108274.0,
+      "margin_required_inr": 21654.8,
+      "max_loss_inr": 989.0,
+      "gross_reward_inr": 1978.0,
+      "statutory_charges_target_inr": 85.93,
+      "statutory_charges_stop_inr": 85.08,
+      "net_profit_target_inr": 1892.07,
+      "net_loss_stop_inr": 1074.08,
+      "breakeven_points_inr": 2.0,
+      "charges_breakdown": {
+        "stt": 27.56,
+        "nse_charges": 6.49,
+        "sebi_fee": 0.22,
+        "stamp_duty": 3.25,
+        "brokerage": 40.0,
+        "gst": 8.41,
+        "total_charges": 85.93,
+        "breakeven_per_share": 2.0
+      },
+      "time_in_force": "day",
+      "order_class": "bracket"
+    }
+  ],
+  "created_at": "2026-10-29 16:56:07 IST"
+}

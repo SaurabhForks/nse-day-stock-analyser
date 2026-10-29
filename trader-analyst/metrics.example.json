@@ -1,0 +1,19 @@
+{
+  "RELIANCE": {
+    "ttm_revenue_cr": 950000.0,
+    "ttm_pat_cr": 72000.0,
+    "ttm_eps": 106.5,
+    "net_margin_pct": 7.58,
+    "latest_quarter": {
+      "end_date": "2026-06-30",
+      "revenue_cr": 240000.0,
+      "ebitda_cr": 42000.0,
+      "pat_cr": 18500.0,
+      "ebitda_margin_pct": 17.5,
+      "pat_margin_pct": 7.71,
+      "eps_diluted": 27.35,
+      "revenue_qoq_pct": 2.1,
+      "revenue_yoy_pct": 8.4
+    }
+  }
+}
