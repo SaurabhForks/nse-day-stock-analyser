@@ -558,7 +558,7 @@ def parse_chart_5m_bars(chart_json, cutoff_dt_ist):
     return bars
 
 
-def check_orb_setup(bars, or_minutes=15):
+def check_orb_setup(bars, or_minutes=15, min_or_width=0.4, max_or_width=2.0):
     """Check Opening Range Breakout setup on 5m bars.
     Indian market session starts at 09:15 IST.
     15-minute ORB range = first 3 bars (09:15, 09:20, 09:25).
@@ -570,6 +570,12 @@ def check_orb_setup(bars, or_minutes=15):
     range_bars = bars[:needed_bars]
     range_high = max(b["high"] for b in range_bars)
     range_low = min(b["low"] for b in range_bars)
+    or_width_pct = ((range_high - range_low) / range_low) * 100.0 if range_low > 0 else 0.0
+
+    if min_or_width is not None and or_width_pct < min_or_width:
+        return None
+    if max_or_width is not None and or_width_pct > max_or_width:
+        return None
 
     # First completed bar after range that closes above range high
     for b in bars[needed_bars:]:
@@ -578,6 +584,7 @@ def check_orb_setup(bars, or_minutes=15):
             return {
                 "or_high": round(range_high, 2),
                 "or_low": round(range_low, 2),
+                "or_width_pct": round(or_width_pct, 2),
                 "trigger_time": b["ist_time"],
                 "trigger_price": round(b["close"], 2),
                 "pct_over": round(pct_over, 2),
@@ -652,7 +659,12 @@ def run_orb(args):
             continue
 
         bars = parse_chart_5m_bars(chart_data, cutoff_dt_ist)
-        res = check_orb_setup(bars, or_minutes=args.or_minutes)
+        res = check_orb_setup(
+            bars,
+            or_minutes=args.or_minutes,
+            min_or_width=args.min_or_width,
+            max_or_width=args.max_or_width,
+        )
         if res:
             res["symbol"] = sym
             hits.append(res)
@@ -663,6 +675,8 @@ def run_orb(args):
         "mode": "orb",
         "as_of": cutoff_dt_ist.strftime("%Y-%m-%d %H:%M IST"),
         "or_minutes": args.or_minutes,
+        "min_or_width_pct": args.min_or_width,
+        "max_or_width_pct": args.max_or_width,
         "universe": len(symbols),
         "scanned": scanned,
         "failed": failed,
@@ -682,8 +696,8 @@ def run_orb(args):
             cutoff_dt_ist.strftime("%H:%M IST"), args.or_minutes, len(hits), scanned
         ))
         for h in hits[:20]:
-            print("  %-12s triggered at %s @ ₹%-8.2f (+%.2f%% over OR high ₹%.2f)" % (
-                h["symbol"], h["trigger_time"], h["trigger_price"], h["pct_over"], h["or_high"]
+            print("  %-12s triggered at %s @ ₹%-8.2f (+%.2f%% over OR high ₹%.2f, width %.2f%%)" % (
+                h["symbol"], h["trigger_time"], h["trigger_price"], h["pct_over"], h["or_high"], h.get("or_width_pct", 0.0)
             ))
 
     return 0 if hits else 1
@@ -719,6 +733,8 @@ def main(argv=None):
     p_o.add_argument("--watchlist", help="Path to watchlist JSON")
     p_o.add_argument("--universe", help="Universe file path")
     p_o.add_argument("--or-minutes", type=int, default=15, help="Opening range duration in minutes (default 15)")
+    p_o.add_argument("--min-or-width", type=float, default=0.4, help="Minimum opening range width in %% (default 0.4%%)")
+    p_o.add_argument("--max-or-width", type=float, default=2.0, help="Maximum opening range width in %% (default 2.0%%)")
     p_o.add_argument("--at", help="Cutoff time in HH:MM IST (e.g. 10:15)")
     p_o.add_argument("--now", help="Simulate current time")
     p_o.add_argument("--offline", help="Offline JSON data file or directory")

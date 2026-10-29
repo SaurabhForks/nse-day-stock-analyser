@@ -281,6 +281,18 @@ def run_add(args):
             "label": "plan target hit @ ₹%.2f" % target_p,
             "active": True,
         })
+        be_trig = p.get("breakeven_trigger_price")
+        be_stop = p.get("breakeven_stop_price")
+        if be_trig and be_stop:
+            new_rules.append({
+                "id": "%s-breakeven" % sym.lower(),
+                "type": "above",
+                "symbol": sym,
+                "price": float(be_trig),
+                "date": date_str,
+                "label": "1R reached: trail stop-loss to breakeven @ ₹%.2f" % float(be_stop),
+                "active": True,
+            })
         new_rules.append({
             "id": "%s-flat" % sym.lower(),
             "type": "time",

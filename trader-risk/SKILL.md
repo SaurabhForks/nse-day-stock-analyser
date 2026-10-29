@@ -29,7 +29,8 @@ python3 "${CLAUDE_SKILL_DIR}/check.py" --now "2026-10-19 10:15"        # test at
 python3 "${CLAUDE_SKILL_DIR}/check.py" --orders trader/orders.json --json
 ```
 
-Flags: `--orders FILE`, `--now "YYYY-MM-DD HH:MM IST"`, `--no-write`, `--json`.
+Flags: `--orders FILE`, `--nifty-filter` (block long breakouts if Nifty 50 < -1.0%),
+`--now "YYYY-MM-DD HH:MM IST"`, `--no-write`, `--json`.
 Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 
 ## What it reads and writes
@@ -37,7 +38,8 @@ Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 | file | what |
 | --- | --- |
 | `trader/orders.json` | read: proposed bracket orders from trader-budget |
-| `trader/config.json` | read: risk limits (max loss, daily loss, trading windows) |
+| `trader/config.json` | read: risk limits (max loss, daily loss, trading windows, `nifty_filter`) |
+| `trader/prices.json` | read: current prices and Nifty 50 index level |
 | `trader/portfolio.json` | read: cash balance and open positions |
 | `trader/state/broker.json` | read: orders placed today (for daily limits & duplicates) |
 | `trader/state/risk.json` | written: cryptographic fingerprints and PASS/BLOCK verdicts |
@@ -48,4 +50,5 @@ Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 3. **Reward:Risk**: Minimum 1:1 reward-to-risk ratio
 4. **Trading Window**: Entries permitted strictly between 09:30 and 14:45 IST
 5. **Calendar**: Closed on weekends and official NSE trading holidays
-6. **Integrity**: No duplicates, no options, whole shares only
+6. **Market Trend**: Broad market filter (blocks aggressive breakout buys when Nifty 50 is trending down > 1.0%)
+7. **Integrity**: No duplicates, no options, whole shares only

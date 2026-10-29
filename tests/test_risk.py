@@ -114,6 +114,30 @@ class TestRisk(unittest.TestCase):
         self.assertEqual(status_hol, "BLOCK")
         self.assertTrue(any("closed today" in r for r in reasons_hol))
 
+    def test_nifty_market_regime_filter(self):
+        cfg_with_nifty = dict(self.cfg)
+        cfg_with_nifty["nifty_filter"] = True
+
+        # Market down -1.5% (below -1.0% threshold)
+        bear_prices = {
+            "^NSEI": {"price": 24000.0, "prev_close": 24365.48, "change_pct": -1.5}
+        }
+        status, reasons = mod.check_order(
+            self.valid_order, cfg_with_nifty, portfolio={}, broker_state={}, prices=bear_prices, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "BLOCK")
+        self.assertTrue(any("broad market risk" in r and "Nifty 50" in r for r in reasons))
+
+        # Bullish or flat market (-0.2%) passes
+        bull_prices = {
+            "^NSEI": {"price": 24316.0, "prev_close": 24365.48, "change_pct": -0.2}
+        }
+        status_pass, reasons_pass = mod.check_order(
+            self.valid_order, cfg_with_nifty, portfolio={}, broker_state={}, prices=bull_prices, now_ist=self.now_ist
+        )
+        self.assertEqual(status_pass, "PASS")
+        self.assertEqual(reasons_pass, [])
+
 
 if __name__ == "__main__":
     unittest.main()

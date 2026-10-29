@@ -34,6 +34,7 @@ python3 "${CLAUDE_SKILL_DIR}/scan.py" orb --watchlist trader/watchlist.json --js
 ```
 
 Flags: `--min-price 10` (INR), `--min-volume 100000`, `--or-minutes 15` (default 15 minutes: 09:15 to 09:30 IST),
+`--min-or-width 0.4` (minimum OR width %, default 0.4%), `--max-or-width 2.0` (maximum OR width %, default 2.0%),
 `--now "2026-10-19 10:15"` (IST time) to pin the clock, `--offline PATH`, `--no-write`, `--json`.
 
 ## What it reads and writes

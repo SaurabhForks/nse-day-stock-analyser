@@ -81,6 +81,23 @@ PREF1,Some Preference Share,P1,10-JAN-2020,100
         self.assertEqual(res["trigger_price"], 2518.0)
         self.assertGreater(res["pct_over"], 0.0)
 
+    def test_orb_range_width_filter(self):
+        # Range high 2510, low 2485 -> width = 1.01%
+        bars = [
+            {"ist_time": "09:15", "high": 2510.0, "low": 2485.0, "close": 2500.0, "volume": 50000},
+            {"ist_time": "09:20", "high": 2505.0, "low": 2490.0, "close": 2495.0, "volume": 40000},
+            {"ist_time": "09:25", "high": 2508.0, "low": 2492.0, "close": 2505.0, "volume": 45000},
+            {"ist_time": "09:30", "high": 2520.0, "low": 2505.0, "close": 2518.0, "volume": 90000},
+        ]
+        # Normal width passes
+        self.assertIsNotNone(mod.check_orb_setup(bars, or_minutes=15, min_or_width=0.4, max_or_width=2.0))
+
+        # Too narrow (min_or_width = 1.5% > 1.01%) -> filtered out (None)
+        self.assertIsNone(mod.check_orb_setup(bars, or_minutes=15, min_or_width=1.5, max_or_width=2.0))
+
+        # Too wide (max_or_width = 0.5% < 1.01%) -> filtered out (None)
+        self.assertIsNone(mod.check_orb_setup(bars, or_minutes=15, min_or_width=0.2, max_or_width=0.5))
+
     def test_cli_universe_offline(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = os.path.join(tmpdir, "universe.txt")

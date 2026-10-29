@@ -39,7 +39,12 @@ Flags: `--stop or-mid` (default for ORB), `or-low`, `price:X`, `pct:X`, `atr:K`;
 | --- | --- |
 | `trader/entry.json` | read: entry price, OR high, OR low from entry timer |
 | `trader/config.json` | read: `flat_by` (default 15:15 IST) |
-| `trader/plan.json` | written: full exit plan with entry, stop, target, R:R ratio, and flat_by |
+| `trader/plan.json` | written: full exit plan with entry, stop, target, R:R ratio, flat_by, `breakeven_trigger_price` (+1R), and `breakeven_stop_price` (+₹0.10) |
+
+## Breakeven Trailing Rule (+1R Rule)
+Every plan automatically calculates:
+- `breakeven_trigger_price`: Trigger price when the stock reaches +1R in profit.
+- `breakeven_stop_price`: Trailing stop adjusted to `entry + ₹0.10` to eliminate downside risk and cover slippage/charges once +1R is attained.
 
 ## Stop Rules
 - `or-mid`: Midpoint of the 15-minute opening range `(high + low) / 2`

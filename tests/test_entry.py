@@ -70,6 +70,55 @@ class TestEntry(unittest.TestCase):
         ])
         self.assertEqual(rc, 0)
 
+    def test_vwap_confirmation_filter(self):
+        # A breakout candle with heavy upper wick rejection:
+        # Spikes to high 2530 with heavy volume, but closes at 2512.
+        # Typical price is (2530 + 2505 + 2512)/3 = 2515.67.
+        # Close (2512.0) is > OR high (2510.0), but < VWAP (~2514.0).
+        wick_rejection_bars = [
+            {"ist_time": "09:15", "date": "2026-10-19", "high": 2505.0, "low": 2490.0, "close": 2500.0, "volume": 10000},
+            {"ist_time": "09:20", "date": "2026-10-19", "high": 2510.0, "low": 2485.0, "close": 2495.0, "volume": 10000},
+            {"ist_time": "09:25", "date": "2026-10-19", "high": 2508.0, "low": 2490.0, "close": 2505.0, "volume": 10000},
+            {"ist_time": "09:30", "date": "2026-10-19", "high": 2530.0, "low": 2505.0, "close": 2512.0, "volume": 200000},
+        ]
+        # With require_vwap=True (default), close 2512 < VWAP 2514.4 -> blocked/waiting
+        res_blocked = mod.evaluate_entry("RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15, require_vwap=True)
+        self.assertEqual(res_blocked["status"], "waiting")
+
+        # With require_vwap=False, it triggers because close 2512 > or_high 2510
+        res_allowed = mod.evaluate_entry("RELIANCE", wick_rejection_bars, setup="orb", or_minutes=15, require_vwap=False)
+        self.assertEqual(res_allowed["status"], "triggered")
+        self.assertEqual(res_allowed["entry_price"], 2512.0)
+
+    def test_opening_range_width_filter(self):
+        # 1. Range too narrow: OR high 2500, OR low 2498 -> 2 / 2498 = 0.08% < 0.4%
+        narrow_bars = [dict(b) for b in self.bars]
+        for i in range(3):
+            narrow_bars[i]["high"] = 2500.0
+            narrow_bars[i]["low"] = 2498.0
+            narrow_bars[i]["close"] = 2499.0
+        res_narrow = mod.evaluate_entry("RELIANCE", narrow_bars, setup="orb", or_minutes=15)
+        self.assertEqual(res_narrow["status"], "waiting")
+        self.assertIn("too narrow", res_narrow["reason"])
+
+        # 2. Range too wide: OR high 2600, OR low 2480 -> 120 / 2480 = 4.84% > 2.0%
+        wide_bars = [dict(b) for b in self.bars]
+        wide_bars[0]["high"] = 2600.0
+        res_wide = mod.evaluate_entry("RELIANCE", wide_bars, setup="orb", or_minutes=15)
+        self.assertEqual(res_wide["status"], "waiting")
+        self.assertIn("too wide", res_wide["reason"])
+
+    def test_rvol_surge_filter(self):
+        # Trigger bar volume is 90,000. Prior 5 bars average is 38,000 (RVol = 2.37x).
+        # If rvol_mult is required to be 3.0x, it should wait.
+        res_wait = mod.evaluate_entry("RELIANCE", self.bars, setup="orb", or_minutes=15, rvol_mult=3.0)
+        self.assertEqual(res_wait["status"], "waiting")
+
+        # If rvol_mult is 2.0x, 2.37x triggers
+        res_trig = mod.evaluate_entry("RELIANCE", self.bars, setup="orb", or_minutes=15, rvol_mult=2.0)
+        self.assertEqual(res_trig["status"], "triggered")
+        self.assertEqual(res_trig["rvol"], 2.37)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -40,6 +40,8 @@ DEFAULTS = {
     "allow_options": False,
     "allow_margin": False,
     "allow_short": False,
+    "nifty_filter": False,
+    "max_nifty_drop_pct": -1.0,
 }
 
 NSE_HOLIDAYS = {
@@ -223,6 +225,24 @@ def check_order(order, config, portfolio, broker_state, prices, now_ist):
             reasons.append("duplicate order: %s %s already placed today" % (side.upper(), symbol))
             break
 
+    # 12. Broad Market Trend / Nifty 50 Alignment Filter
+    nifty_filter_enabled = bool(config.get("nifty_filter") or config.get("require_market_alignment", False))
+    market_change = order.get("nifty_change_pct") if "nifty_change_pct" in order else order.get("market_change_pct")
+    if market_change is None and prices:
+        nifty_q = prices.get("^NSEI") or prices.get("NIFTY") or prices.get("NIFTY 50")
+        if isinstance(nifty_q, dict):
+            p = float(nifty_q.get("price") or 0.0)
+            pc = float(nifty_q.get("prev_close") or 0.0)
+            if pc > 0:
+                market_change = ((p - pc) / pc) * 100.0
+            elif "change_pct" in nifty_q:
+                market_change = float(nifty_q["change_pct"])
+
+    if nifty_filter_enabled and market_change is not None:
+        max_market_drop = float(config.get("max_nifty_drop_pct", -1.0))
+        if side == "buy" and float(market_change) < max_market_drop:
+            reasons.append("broad market risk: Nifty 50 is down %.2f%% (bearish trend blocks long breakouts)" % float(market_change))
+
     status = "BLOCK" if reasons else "PASS"
     return status, reasons
 
@@ -249,6 +269,9 @@ def run_check(args):
                 cfg.update(json.load(fh))
         except Exception:
             pass
+
+    if args.nifty_filter:
+        cfg["nifty_filter"] = True
 
     # Load portfolio
     portfolio = {}
@@ -325,6 +348,7 @@ def run_check(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Pre-Trade Risk Check for Indian Stock Market.")
     parser.add_argument("--orders", help="Path to orders.json")
+    parser.add_argument("--nifty-filter", action="store_true", help="Block long entries when Nifty 50 is down > 1.0%")
     parser.add_argument("--now", help="Simulate clock (YYYY-MM-DD HH:MM IST)")
     parser.add_argument("--no-write", action="store_true", help="Do not write trader/state/risk.json")
     parser.add_argument("--json", action="store_true", help="Output JSON only")

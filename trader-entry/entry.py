@@ -177,8 +177,28 @@ def parse_bars(chart_json, interval_sec=300, cutoff_utc=None):
     return bars
 
 
+def compute_vwap(bars):
+    """Compute Volume-Weighted Average Price (VWAP) across bars.
+    Typical price = (high + low + close) / 3.0
+    VWAP = sum(typical_price * volume) / sum(volume)
+    """
+    total_vol = 0
+    total_pv = 0.0
+    for b in bars:
+        v = b.get("volume", 0)
+        if v <= 0:
+            continue
+        tp = (b["high"] + b["low"] + b["close"]) / 3.0
+        total_pv += tp * v
+        total_vol += v
+    if total_vol == 0:
+        return None
+    return total_pv / total_vol
+
+
 def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol_x=1.0,
-                   window_start="09:30", window_end="14:45"):
+                   rvol_mult=1.0, min_or_width_pct=0.4, max_or_width_pct=2.0,
+                   require_vwap=True, window_start="09:30", window_end="14:45"):
     """Evaluate whether an entry triggered."""
     if not bars:
         return {"status": "no-data", "reason": "no closed bars available"}
@@ -197,17 +217,48 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
         or_high = max(b["high"] for b in range_bars)
         or_low = min(b["low"] for b in range_bars)
         avg_or_vol = sum(b["volume"] for b in range_bars) / len(range_bars)
+        or_width_pct = ((or_high - or_low) / or_low) * 100.0 if or_low > 0 else 0.0
+
+        if min_or_width_pct is not None and or_width_pct < min_or_width_pct:
+            return {
+                "status": "waiting",
+                "reason": "opening range too narrow (%.2f%% < %.2f%% minimum volatility)" % (
+                    or_width_pct, min_or_width_pct
+                ),
+            }
+        if max_or_width_pct is not None and or_width_pct > max_or_width_pct:
+            return {
+                "status": "waiting",
+                "reason": "opening range too wide / exhausted (%.2f%% > %.2f%% maximum volatility)" % (
+                    or_width_pct, max_or_width_pct
+                ),
+            }
 
         # Check completed bars after the range
-        for b in bars[needed_bars:]:
+        for idx in range(needed_bars, len(bars)):
+            b = bars[idx]
             b_time = b["ist_time"]
             if b_time < window_start:
                 continue
             if b_time > window_end:
                 break
             if b["close"] > or_high:
+                # 1. Opening range volume check
                 if min_vol_x > 1.0 and b["volume"] < (avg_or_vol * min_vol_x):
                     continue
+
+                # 2. Rolling 5-bar relative volume surge check
+                prev_bars = bars[max(0, idx - 5):idx]
+                avg_5b_vol = (sum(pb["volume"] for pb in prev_bars) / len(prev_bars)) if prev_bars else avg_or_vol
+                rvol = round(b["volume"] / avg_5b_vol, 2) if avg_5b_vol > 0 else 1.0
+                if rvol_mult > 1.0 and avg_5b_vol > 0 and b["volume"] < (avg_5b_vol * rvol_mult):
+                    continue
+
+                # 3. Intraday VWAP confirmation
+                vwap = compute_vwap(bars[:idx + 1])
+                if require_vwap and vwap is not None and b["close"] < vwap:
+                    continue
+
                 pct_over = ((b["close"] - or_high) / or_high) * 100.0
                 return {
                     "status": "triggered",
@@ -219,9 +270,13 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                     "entry_price": round(b["close"], 2),
                     "or_high": round(or_high, 2),
                     "or_low": round(or_low, 2),
+                    "or_width_pct": round(or_width_pct, 2),
+                    "vwap": round(vwap, 2) if vwap is not None else None,
+                    "rvol": rvol,
                     "pct_over": round(pct_over, 2),
                     "volume": b["volume"],
                     "avg_or_volume": int(avg_or_vol),
+                    "avg_5bar_volume": int(avg_5b_vol),
                 }
 
         if last_time >= window_end:
@@ -233,13 +288,17 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
         if level is None:
             raise EntryError("level setup requires --level PRICE")
         target_lvl = float(level)
-        for b in bars:
+        for idx in range(len(bars)):
+            b = bars[idx]
             b_time = b["ist_time"]
             if b_time < window_start:
                 continue
             if b_time > window_end:
                 break
             if b["close"] > target_lvl:
+                vwap = compute_vwap(bars[:idx + 1])
+                if require_vwap and vwap is not None and b["close"] < vwap:
+                    continue
                 pct_over = ((b["close"] - target_lvl) / target_lvl) * 100.0
                 return {
                     "status": "triggered",
@@ -250,6 +309,7 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                     "trigger_bar_time": b_time,
                     "entry_price": round(b["close"], 2),
                     "level": round(target_lvl, 2),
+                    "vwap": round(vwap, 2) if vwap is not None else None,
                     "pct_over": round(pct_over, 2),
                     "volume": b["volume"],
                 }
@@ -286,6 +346,10 @@ def run_check(args):
         level=args.level,
         or_minutes=args.or_minutes,
         min_vol_x=args.min_volume_x,
+        rvol_mult=args.rvol_mult,
+        min_or_width_pct=args.min_or_width,
+        max_or_width_pct=args.max_or_width,
+        require_vwap=args.require_vwap,
         window_start=w_start,
         window_end=w_end,
     )
@@ -301,9 +365,10 @@ def run_check(args):
     else:
         st = res["status"].upper()
         if st == "TRIGGERED":
-            print("%s %s @ ₹%.2f at %s (+%.2f%% over ₹%.2f)" % (
+            vwap_txt = " (VWAP ₹%.2f, RVol %.1fx)" % (res["vwap"], res["rvol"]) if res.get("vwap") else ""
+            print("%s %s @ ₹%.2f at %s%s (+%.2f%% over ₹%.2f)" % (
                 st, res["symbol"], res["entry_price"], res["trigger_time"],
-                res["pct_over"], res.get("or_high") or res.get("level")
+                vwap_txt, res["pct_over"], res.get("or_high") or res.get("level")
             ))
         else:
             print("%s %s: %s" % (st, clean_symbol(args.symbol), res.get("reason", "")))
@@ -326,6 +391,10 @@ def run_watch(args):
             level=args.level,
             or_minutes=args.or_minutes,
             min_vol_x=args.min_volume_x,
+            rvol_mult=args.rvol_mult,
+            min_or_width_pct=args.min_or_width,
+            max_or_width_pct=args.max_or_width,
+            require_vwap=args.require_vwap,
             window_end=args.until or DEFAULTS["no_entries_after"],
         )
 
@@ -367,7 +436,13 @@ def run_watchlist(args):
         try:
             chart = fetch_chart(sym, interval="5m", offline=args.offline)
             bars = parse_bars(chart, interval_sec=300, cutoff_utc=parse_now(args.now))
-            res = evaluate_entry(sym, bars, setup="orb", or_minutes=15)
+            res = evaluate_entry(
+                sym, bars, setup="orb", or_minutes=15,
+                min_or_width_pct=args.min_or_width,
+                max_or_width_pct=args.max_or_width,
+                require_vwap=args.require_vwap,
+                rvol_mult=args.rvol_mult,
+            )
             if res.get("status") == "triggered":
                 triggered.append(res)
                 print("TRIGGERED: %-10s @ ₹%.2f at %s" % (sym, res["entry_price"], res["trigger_time"]))
@@ -394,7 +469,12 @@ def main(argv=None):
     p_c.add_argument("--level", type=float, help="Breakout level price (for level setup)")
     p_c.add_argument("--or-minutes", type=int, default=15, help="Opening range duration in minutes")
     p_c.add_argument("--interval", default="5m", choices=["1m", "5m"], help="Bar interval")
-    p_c.add_argument("--min-volume-x", type=float, default=1.0, help="Volume confirmation multiplier")
+    p_c.add_argument("--min-volume-x", type=float, default=1.0, help="Volume confirmation multiplier vs OR average")
+    p_c.add_argument("--rvol-mult", type=float, default=1.0, help="Volume surge multiplier vs 5-bar rolling average")
+    p_c.add_argument("--min-or-width", type=float, default=0.4, help="Minimum opening range width in %% (default 0.4%%)")
+    p_c.add_argument("--max-or-width", type=float, default=2.0, help="Maximum opening range width in %% (default 2.0%%)")
+    p_c.add_argument("--require-vwap", dest="require_vwap", action="store_true", default=True, help="Require price > intraday VWAP")
+    p_c.add_argument("--no-vwap", dest="require_vwap", action="store_false", help="Disable VWAP filter")
     p_c.add_argument("--now", help="Simulate clock (YYYY-MM-DD HH:MM IST)")
     p_c.add_argument("--offline", help="Path to offline JSON chart")
     p_c.add_argument("--write", action="store_true", help="Write trader/entry.json on trigger")
@@ -408,6 +488,11 @@ def main(argv=None):
     p_w.add_argument("--level", type=float)
     p_w.add_argument("--or-minutes", type=int, default=15)
     p_w.add_argument("--min-volume-x", type=float, default=1.0)
+    p_w.add_argument("--rvol-mult", type=float, default=1.0)
+    p_w.add_argument("--min-or-width", type=float, default=0.4)
+    p_w.add_argument("--max-or-width", type=float, default=2.0)
+    p_w.add_argument("--require-vwap", dest="require_vwap", action="store_true", default=True)
+    p_w.add_argument("--no-vwap", dest="require_vwap", action="store_false")
     p_w.add_argument("--every", type=int, default=30, help="Seconds between polls")
     p_w.add_argument("--until", default="14:45", help="Stop polling at this IST time (default 14:45)")
     p_w.add_argument("--now", help="Simulate clock")
@@ -415,6 +500,11 @@ def main(argv=None):
 
     # watchlist
     p_wl = sub.add_parser("watchlist", help="Check all symbols in trader/watchlist.json")
+    p_wl.add_argument("--min-or-width", type=float, default=0.4)
+    p_wl.add_argument("--max-or-width", type=float, default=2.0)
+    p_wl.add_argument("--rvol-mult", type=float, default=1.0)
+    p_wl.add_argument("--require-vwap", dest="require_vwap", action="store_true", default=True)
+    p_wl.add_argument("--no-vwap", dest="require_vwap", action="store_false")
     p_wl.add_argument("--now", help="Simulate clock")
     p_wl.add_argument("--offline", help="Path to offline directory")
     p_wl.add_argument("--no-write", action="store_true")
