@@ -77,6 +77,30 @@ class TestExit(unittest.TestCase):
         with self.assertRaises(mod.PlanError):
             mod.build_plan("RELIANCE", entry_price=2500.00, stop_rule="price:2499.50")
 
+    def test_short_exit_plan(self):
+        # Short plan: entry 2470.00, or_high 2510, or_low 2480, or-mid = 2495
+        # Risk = 2495 - 2470 = 25.00
+        # Target 2R = 2470 - (2 * 25) = 2420.00
+        # BE Trigger = 2470 - (1.2 * 25) = 2440.00
+        # BE Stop = 2470 - 0.10 = 2469.90
+        plan = mod.build_plan(
+            symbol="RELIANCE",
+            entry_price=2470.00,
+            or_high=2510.00,
+            or_low=2480.00,
+            stop_rule="or-mid",
+            target_rule="2R",
+            side="sell",
+        )
+        self.assertEqual(plan["side"], "sell")
+        self.assertEqual(plan["stop_price"], 2495.00)
+        self.assertEqual(plan["target_price"], 2420.00)
+        self.assertEqual(plan["risk_per_share"], 25.00)
+        self.assertEqual(plan["reward_per_share"], 50.00)
+        self.assertEqual(plan["reward_risk_ratio"], 2.0)
+        self.assertEqual(plan["breakeven_trigger_price"], 2440.00)
+        self.assertEqual(plan["breakeven_stop_price"], 2469.90)
+
     def test_cli_plan(self):
         rc = mod.main([
             "plan", "--symbol", "RELIANCE", "--entry", "2518.00",

@@ -141,6 +141,22 @@ class TestEntry(unittest.TestCase):
         self.assertEqual(res_trig["status"], "triggered")
         self.assertEqual(res_trig["rvol"], 2.37)
 
+    def test_evaluate_orb_short_breakdown(self):
+        # Range high 2510, Range low 2480 (range width 1.21%)
+        # Breakdown bar at 09:30 drops to low 2468, close 2470 (under 2480) with high volume
+        short_bars = [
+            {"ist_time": "09:15", "date": "2026-10-19", "high": 2505.0, "low": 2490.0, "close": 2500.0, "volume": 50000},
+            {"ist_time": "09:20", "date": "2026-10-19", "high": 2510.0, "low": 2480.0, "close": 2495.0, "volume": 40000},
+            {"ist_time": "09:25", "date": "2026-10-19", "high": 2508.0, "low": 2492.0, "close": 2505.0, "volume": 45000},
+            {"ist_time": "09:30", "date": "2026-10-19", "high": 2482.0, "low": 2468.0, "close": 2470.0, "volume": 90000},
+        ]
+        res = mod.evaluate_entry("RELIANCE", short_bars, setup="orb", direction="short", or_minutes=15)
+        self.assertEqual(res["status"], "triggered")
+        self.assertEqual(res["side"], "sell")
+        self.assertEqual(res["direction"], "short")
+        self.assertEqual(res["entry_price"], 2470.0)
+        self.assertEqual(res["or_low"], 2480.0)
+
 
 if __name__ == "__main__":
     unittest.main()

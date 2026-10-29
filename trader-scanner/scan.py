@@ -558,8 +558,8 @@ def parse_chart_5m_bars(chart_json, cutoff_dt_ist):
     return bars
 
 
-def check_orb_setup(bars, or_minutes=15, min_or_width=0.4, max_or_width=2.0):
-    """Check Opening Range Breakout setup on 5m bars.
+def check_orb_setup(bars, or_minutes=15, min_or_width=0.4, max_or_width=2.0, direction="long"):
+    """Check Opening Range Breakout setup on 5m bars (long, short, or both).
     Indian market session starts at 09:15 IST.
     15-minute ORB range = first 3 bars (09:15, 09:20, 09:25).
     """
@@ -577,17 +577,30 @@ def check_orb_setup(bars, or_minutes=15, min_or_width=0.4, max_or_width=2.0):
     if max_or_width is not None and or_width_pct > max_or_width:
         return None
 
-    # First completed bar after range that closes above range high
+    # First completed bar after range that triggers
     for b in bars[needed_bars:]:
-        if b["close"] > range_high:
+        if direction in ("long", "both") and b["close"] > range_high:
             pct_over = ((b["close"] - range_high) / range_high) * 100.0
             return {
+                "side": "buy",
                 "or_high": round(range_high, 2),
                 "or_low": round(range_low, 2),
                 "or_width_pct": round(or_width_pct, 2),
                 "trigger_time": b["ist_time"],
                 "trigger_price": round(b["close"], 2),
                 "pct_over": round(pct_over, 2),
+                "volume": b["volume"],
+            }
+        elif direction in ("short", "both") and b["close"] < range_low:
+            pct_under = ((range_low - b["close"]) / range_low) * 100.0
+            return {
+                "side": "sell",
+                "or_high": round(range_high, 2),
+                "or_low": round(range_low, 2),
+                "or_width_pct": round(or_width_pct, 2),
+                "trigger_time": b["ist_time"],
+                "trigger_price": round(b["close"], 2),
+                "pct_under": round(pct_under, 2),
                 "volume": b["volume"],
             }
     return None
@@ -664,12 +677,13 @@ def run_orb(args):
             or_minutes=args.or_minutes,
             min_or_width=args.min_or_width,
             max_or_width=args.max_or_width,
+            direction=getattr(args, "direction", "long"),
         )
         if res:
             res["symbol"] = sym
             hits.append(res)
 
-    hits.sort(key=lambda x: x["pct_over"], reverse=True)
+    hits.sort(key=lambda x: x.get("pct_over") if "pct_over" in x else x.get("pct_under", 0.0), reverse=True)
 
     out_data = {
         "mode": "orb",
@@ -736,6 +750,7 @@ def main(argv=None):
     p_o.add_argument("--min-or-width", type=float, default=0.4, help="Minimum opening range width in %% (default 0.4%%)")
     p_o.add_argument("--max-or-width", type=float, default=2.0, help="Maximum opening range width in %% (default 2.0%%)")
     p_o.add_argument("--at", default="10:15", help="Cutoff time in HH:MM IST (default 10:15 prime time)")
+    p_o.add_argument("--direction", default="long", choices=["long", "short", "both"], help="Breakout scan direction: long (default), short, or both")
     p_o.add_argument("--now", help="Simulate current time")
     p_o.add_argument("--offline", help="Offline JSON data file or directory")
     p_o.add_argument("--no-write", action="store_true", help="Do not write trader/watchlist.json")

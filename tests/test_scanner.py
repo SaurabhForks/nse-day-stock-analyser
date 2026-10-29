@@ -98,6 +98,19 @@ PREF1,Some Preference Share,P1,10-JAN-2020,100
         # Too wide (max_or_width = 0.5% < 1.01%) -> filtered out (None)
         self.assertIsNone(mod.check_orb_setup(bars, or_minutes=15, min_or_width=0.2, max_or_width=0.5))
 
+    def test_orb_short_breakdown(self):
+        # Range low is 2485.0. Bar 3 closes at 2475.0 (below range low)
+        short_bars = [
+            {"ist_time": "09:15", "high": 2510.0, "low": 2485.0, "close": 2500.0, "volume": 50000},
+            {"ist_time": "09:20", "high": 2505.0, "low": 2490.0, "close": 2495.0, "volume": 40000},
+            {"ist_time": "09:25", "high": 2508.0, "low": 2492.0, "close": 2505.0, "volume": 45000},
+            {"ist_time": "09:30", "high": 2482.0, "low": 2470.0, "close": 2475.0, "volume": 90000},
+        ]
+        res = mod.check_orb_setup(short_bars, or_minutes=15, direction="short")
+        self.assertIsNotNone(res)
+        self.assertEqual(res["side"], "sell")
+        self.assertEqual(res["trigger_price"], 2475.0)
+
     def test_cli_universe_offline(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             out_file = os.path.join(tmpdir, "universe.txt")

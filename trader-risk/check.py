@@ -39,9 +39,9 @@ DEFAULTS = {
     "blocked": [],
     "allow_options": False,
     "allow_margin": False,
-    "allow_short": False,
+    "allow_short": True,
     "nifty_filter": False,
-    "max_nifty_drop_pct": -1.0,
+    "max_nifty_drop_pct": -0.30,
 }
 
 NSE_HOLIDAYS = {
@@ -173,18 +173,34 @@ def check_order(order, config, portfolio, broker_state, prices, now_ist):
             reasons.append("stop-loss is required by risk configuration")
         elif side == "buy" and stop >= entry:
             reasons.append("stop-loss ₹%.2f is at or above entry price ₹%.2f" % (stop, entry))
+        elif side == "sell" and stop <= entry:
+            reasons.append("stop-loss ₹%.2f is at or below entry price ₹%.2f for short order" % (stop, entry))
+
+    # Short selling permission check
+    if side == "sell" and not config.get("allow_short", DEFAULTS["allow_short"]):
+        reasons.append("short selling is disabled by risk configuration")
 
     # 6. Reward to Risk Check
-    if stop > 0 and target > 0 and entry > stop:
+    if side == "buy" and stop > 0 and target > 0 and entry > stop:
         risk = entry - stop
         reward = target - entry
         rr = reward / risk
         if rr < min_rr:
             reasons.append("reward:risk ratio 1:%.2f is below minimum 1:%.2f" % (rr, min_rr))
+    elif side == "sell" and stop > 0 and target > 0 and stop > entry:
+        risk = stop - entry
+        reward = entry - target
+        rr = reward / risk
+        if rr < min_rr:
+            reasons.append("reward:risk ratio 1:%.2f is below minimum 1:%.2f" % (rr, min_rr))
 
     # 7. Max Loss Per Trade Check
-    if stop > 0 and entry > stop:
+    if side == "buy" and stop > 0 and entry > stop:
         trade_loss = (entry - stop) * qty
+        if trade_loss > max_loss_trade:
+            reasons.append("max loss ₹%.2f exceeds limit ₹%.2f" % (trade_loss, max_loss_trade))
+    elif side == "sell" and stop > 0 and stop > entry:
+        trade_loss = (stop - entry) * qty
         if trade_loss > max_loss_trade:
             reasons.append("max loss ₹%.2f exceeds limit ₹%.2f" % (trade_loss, max_loss_trade))
 
@@ -207,13 +223,18 @@ def check_order(order, config, portfolio, broker_state, prices, now_ist):
     if len(placed_today) >= max_orders_day:
         reasons.append("daily order limit of %d reached" % max_orders_day)
 
-    entries_today = [o for o in placed_today if o.get("side") == "buy"]
+    entries_today = [o for o in placed_today if o.get("side") in ("buy", "sell")]
     if len(entries_today) >= max_trades_day:
         reasons.append("daily trade limit of %d entries reached" % max_trades_day)
 
     # 10. Daily Loss Limit
     accum_loss = sum(float(o.get("max_loss_inr", 0)) for o in entries_today)
-    this_loss = (entry - stop) * qty if stop > 0 and entry > stop else 0.0
+    this_loss = 0.0
+    if side == "buy" and stop > 0 and entry > stop:
+        this_loss = (entry - stop) * qty
+    elif side == "sell" and stop > 0 and stop > entry:
+        this_loss = (stop - entry) * qty
+
     if (accum_loss + this_loss) > max_daily_loss:
         reasons.append("combined daily risk ₹%.2f exceeds max daily loss ₹%.2f" % (
             accum_loss + this_loss, max_daily_loss
@@ -239,9 +260,11 @@ def check_order(order, config, portfolio, broker_state, prices, now_ist):
                 market_change = float(nifty_q["change_pct"])
 
     if nifty_filter_enabled and market_change is not None:
-        max_market_drop = float(config.get("max_nifty_drop_pct", -1.0))
+        max_market_drop = float(config.get("max_nifty_drop_pct", DEFAULTS["max_nifty_drop_pct"]))
         if side == "buy" and float(market_change) < max_market_drop:
             reasons.append("broad market risk: Nifty 50 is down %.2f%% (bearish trend blocks long breakouts)" % float(market_change))
+        elif side == "sell" and float(market_change) > abs(max_market_drop):
+            reasons.append("broad market risk: Nifty 50 is up %.2f%% (bullish trend blocks short breakdowns)" % float(market_change))
 
     status = "BLOCK" if reasons else "PASS"
     return status, reasons

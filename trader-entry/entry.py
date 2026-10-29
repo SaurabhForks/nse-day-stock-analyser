@@ -198,9 +198,10 @@ def compute_vwap(bars):
 
 def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol_x=1.0,
                    rvol_mult=1.0, min_or_width_pct=0.4, max_or_width_pct=2.0,
-                   min_close_pos=0.65, max_upper_wick=0.35,
-                   require_vwap=True, window_start="09:30", window_end="10:15"):
-    """Evaluate whether an entry triggered."""
+                   min_close_pos=0.65, max_upper_wick=0.35, max_lower_wick=0.35,
+                   require_vwap=True, window_start="09:30", window_end="10:15",
+                   direction="long"):
+    """Evaluate whether an entry triggered (long, short, or both)."""
     if not bars:
         return {"status": "no-data", "reason": "no closed bars available"}
 
@@ -243,27 +244,24 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                 continue
             if b_time > window_end:
                 break
-            if b["close"] > or_high:
-                # 1. Opening range volume check
+
+            prev_bars = bars[max(0, idx - 5):idx]
+            avg_5b_vol = (sum(pb["volume"] for pb in prev_bars) / len(prev_bars)) if prev_bars else avg_or_vol
+            rvol = round(b["volume"] / avg_5b_vol, 2) if avg_5b_vol > 0 else 1.0
+            vwap = compute_vwap(bars[:idx + 1])
+            c_rng = b["high"] - b["low"]
+            c_pos = ((b["close"] - b["low"]) / c_rng) if c_rng > 0 else 1.0
+            u_wick = ((b["high"] - max(b["close"], b.get("open", b["close"]))) / c_rng) if c_rng > 0 else 0.0
+            l_wick = ((min(b["close"], b.get("open", b["close"])) - b["low"]) / c_rng) if c_rng > 0 else 0.0
+
+            # 1. LONG Breakout
+            if direction in ("long", "both") and b["close"] > or_high:
                 if min_vol_x > 1.0 and b["volume"] < (avg_or_vol * min_vol_x):
                     continue
-
-                # 2. Rolling 5-bar relative volume surge check
-                prev_bars = bars[max(0, idx - 5):idx]
-                avg_5b_vol = (sum(pb["volume"] for pb in prev_bars) / len(prev_bars)) if prev_bars else avg_or_vol
-                rvol = round(b["volume"] / avg_5b_vol, 2) if avg_5b_vol > 0 else 1.0
                 if rvol_mult > 1.0 and avg_5b_vol > 0 and b["volume"] < (avg_5b_vol * rvol_mult):
                     continue
-
-                # 3. Intraday VWAP confirmation
-                vwap = compute_vwap(bars[:idx + 1])
                 if require_vwap and vwap is not None and b["close"] < vwap:
                     continue
-
-                # 4. Trigger candle quality & upper wick rejection check
-                c_rng = b["high"] - b["low"]
-                c_pos = ((b["close"] - b["low"]) / c_rng) if c_rng > 0 else 1.0
-                u_wick = ((b["high"] - max(b["close"], b.get("open", b["close"]))) / c_rng) if c_rng > 0 else 0.0
                 if min_close_pos is not None and c_pos < min_close_pos:
                     continue
                 if max_upper_wick is not None and u_wick > max_upper_wick:
@@ -274,6 +272,8 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                     "status": "triggered",
                     "symbol": clean_symbol(symbol),
                     "setup": "orb",
+                    "side": "buy",
+                    "direction": "long",
                     "date": date_str,
                     "trigger_time": b_time + " IST",
                     "trigger_bar_time": b_time,
@@ -291,8 +291,51 @@ def evaluate_entry(symbol, bars, setup="orb", level=None, or_minutes=15, min_vol
                     "avg_5bar_volume": int(avg_5b_vol),
                 }
 
+            # 2. SHORT Breakdown
+            elif direction in ("short", "both") and b["close"] < or_low:
+                if min_vol_x > 1.0 and b["volume"] < (avg_or_vol * min_vol_x):
+                    continue
+                if rvol_mult > 1.0 and avg_5b_vol > 0 and b["volume"] < (avg_5b_vol * rvol_mult):
+                    continue
+                if require_vwap and vwap is not None and b["close"] > vwap:
+                    continue
+                # Close must be near the bottom of candle (e.g. <= 0.35)
+                max_short_pos = (1.0 - min_close_pos) if min_close_pos is not None else 0.35
+                if c_pos > max_short_pos:
+                    continue
+                if max_lower_wick is not None and l_wick > max_lower_wick:
+                    continue
+
+                pct_under = ((or_low - b["close"]) / or_low) * 100.0
+                return {
+                    "status": "triggered",
+                    "symbol": clean_symbol(symbol),
+                    "setup": "orb",
+                    "side": "sell",
+                    "direction": "short",
+                    "date": date_str,
+                    "trigger_time": b_time + " IST",
+                    "trigger_bar_time": b_time,
+                    "entry_price": round(b["close"], 2),
+                    "or_high": round(or_high, 2),
+                    "or_low": round(or_low, 2),
+                    "or_width_pct": round(or_width_pct, 2),
+                    "close_pos_pct": round(c_pos * 100.0, 1),
+                    "lower_wick_pct": round(l_wick * 100.0, 1),
+                    "vwap": round(vwap, 2) if vwap is not None else None,
+                    "rvol": rvol,
+                    "pct_under": round(pct_under, 2),
+                    "volume": b["volume"],
+                    "avg_or_volume": int(avg_or_vol),
+                    "avg_5bar_volume": int(avg_5b_vol),
+                }
+
         if last_time >= window_end:
             return {"status": "expired", "reason": "no trigger before %s IST" % window_end}
+        if direction == "short":
+            return {"status": "waiting", "reason": "no close below range low ₹%.2f yet" % or_low}
+        elif direction == "both":
+            return {"status": "waiting", "reason": "price inside range [₹%.2f - ₹%.2f]" % (or_low, or_high)}
         return {"status": "waiting", "reason": "no close above range high ₹%.2f yet" % or_high}
 
     # Static Level Setup
@@ -366,6 +409,7 @@ def run_check(args):
         require_vwap=args.require_vwap,
         window_start=w_start,
         window_end=w_end,
+        direction=getattr(args, "direction", "long"),
     )
 
     if args.write or res.get("status") == "triggered":
@@ -380,9 +424,12 @@ def run_check(args):
         st = res["status"].upper()
         if st == "TRIGGERED":
             vwap_txt = " (VWAP ₹%.2f, RVol %.1fx)" % (res["vwap"], res["rvol"]) if res.get("vwap") else ""
-            print("%s %s @ ₹%.2f at %s%s (+%.2f%% over ₹%.2f)" % (
-                st, res["symbol"], res["entry_price"], res["trigger_time"],
-                vwap_txt, res["pct_over"], res.get("or_high") or res.get("level")
+            side_txt = " [%s]" % res.get("side", "BUY").upper()
+            pct_txt = "+%.2f%% over" % res["pct_over"] if "pct_over" in res else "-%.2f%% under" % res.get("pct_under", 0.0)
+            lvl_txt = res.get("or_high") if res.get("side") == "buy" else res.get("or_low", res.get("level"))
+            print("%s%s %s @ ₹%.2f at %s%s (%s ₹%.2f)" % (
+                st, side_txt, res["symbol"], res["entry_price"], res["trigger_time"],
+                vwap_txt, pct_txt, lvl_txt
             ))
         else:
             print("%s %s: %s" % (st, clean_symbol(args.symbol), res.get("reason", "")))
@@ -412,13 +459,16 @@ def run_watch(args):
             max_upper_wick=args.max_upper_wick,
             require_vwap=args.require_vwap,
             window_end=args.until or DEFAULTS["no_entries_after"],
+            direction=getattr(args, "direction", "long"),
         )
 
         last_time = bars[-1]["ist_time"] if bars else "--:--"
         last_close = bars[-1]["close"] if bars else 0.0
 
         if res["status"] == "triggered":
-            print("TRIGGERED: %s @ ₹%.2f at %s" % (res["symbol"], res["entry_price"], res["trigger_time"]))
+            print("TRIGGERED: %s %s @ ₹%.2f at %s" % (
+                res.get("side", "BUY").upper(), res["symbol"], res["entry_price"], res["trigger_time"]
+            ))
             os.makedirs("trader", exist_ok=True)
             with open("trader/entry.json", "w", encoding="utf-8") as fh:
                 json.dump(res, fh, indent=2)
@@ -461,10 +511,13 @@ def run_watchlist(args):
                 require_vwap=args.require_vwap,
                 rvol_mult=args.rvol_mult,
                 window_end=args.window_end or DEFAULTS["no_entries_after"],
+                direction=getattr(args, "direction", "long"),
             )
             if res.get("status") == "triggered":
                 triggered.append(res)
-                print("TRIGGERED: %-10s @ ₹%.2f at %s" % (sym, res["entry_price"], res["trigger_time"]))
+                print("TRIGGERED: %-4s %-10s @ ₹%.2f at %s" % (
+                    res.get("side", "BUY").upper(), sym, res["entry_price"], res["trigger_time"]
+                ))
             else:
                 print("WAITING:   %-10s %s" % (sym, res.get("reason", "")))
         except Exception as e:
@@ -485,6 +538,7 @@ def main(argv=None):
     p_c = sub.add_parser("check", help="Check if setup has triggered")
     p_c.add_argument("symbol", help="Stock ticker (e.g. RELIANCE)")
     p_c.add_argument("--setup", default="orb", choices=["orb", "level"], help="Setup rule")
+    p_c.add_argument("--direction", default="long", choices=["long", "short", "both"], help="Breakout trade direction (long, short, or both)")
     p_c.add_argument("--level", type=float, help="Breakout level price (for level setup)")
     p_c.add_argument("--or-minutes", type=int, default=15, help="Opening range duration in minutes")
     p_c.add_argument("--interval", default="5m", choices=["1m", "5m"], help="Bar interval")
@@ -507,6 +561,7 @@ def main(argv=None):
     p_w = sub.add_parser("watch", help="Poll bar by bar until trigger")
     p_w.add_argument("symbol", help="Stock ticker")
     p_w.add_argument("--setup", default="orb", choices=["orb", "level"])
+    p_w.add_argument("--direction", default="long", choices=["long", "short", "both"])
     p_w.add_argument("--level", type=float)
     p_w.add_argument("--or-minutes", type=int, default=15)
     p_w.add_argument("--min-volume-x", type=float, default=1.0)
@@ -524,6 +579,7 @@ def main(argv=None):
 
     # watchlist
     p_wl = sub.add_parser("watchlist", help="Check all symbols in trader/watchlist.json")
+    p_wl.add_argument("--direction", default="long", choices=["long", "short", "both"])
     p_wl.add_argument("--min-or-width", type=float, default=0.4)
     p_wl.add_argument("--max-or-width", type=float, default=2.0)
     p_wl.add_argument("--rvol-mult", type=float, default=1.0)

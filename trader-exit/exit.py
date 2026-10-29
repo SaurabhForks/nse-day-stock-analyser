@@ -19,7 +19,7 @@ import json
 import os
 import re
 import sys
-from decimal import Decimal, InvalidOperation, ROUND_FLOOR, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_FLOOR, ROUND_CEILING, ROUND_HALF_UP, ROUND_HALF_DOWN
 
 UA = "Mozilla/5.0 (compatible; indian-day-trader-skill/2.0; +https://github.com/SaurabhTomar/indian-day-trader-skill)"
 DEFAULTS = {"flat_by": "15:15", "min_reward_risk": 1.0}
@@ -70,84 +70,147 @@ def compute_atr(bars, period=14):
 
 
 def build_plan(symbol, entry_price, or_high=None, or_low=None, stop_rule="or-mid",
-               target_rule="2R", flat_by="15:15", date_str=None, bars=None):
-    """Create a validated day trading exit plan."""
+               target_rule="2R", flat_by="15:15", date_str=None, bars=None, side="buy"):
+    """Create a validated day trading exit plan (supports long buy or short sell)."""
     symbol = clean_symbol(symbol)
     entry = Decimal(str(entry_price)).quantize(Decimal("0.01"))
+    side = (side or "buy").lower()
+    if side not in ("buy", "sell"):
+        raise PlanError("invalid side: %r (must be 'buy' or 'sell')" % side)
 
     # Resolve Stop Price
     stop_price = None
     stop_reason = ""
 
-    if stop_rule == "or-mid":
-        if or_high is None or or_low is None:
-            raise PlanError("or-mid stop requires --or-high and --or-low (or trader/entry.json)")
-        mid = (Decimal(str(or_high)) + Decimal(str(or_low))) / Decimal("2")
-        stop_price = round_tick(mid, ROUND_FLOOR)
-        stop_reason = "opening range midpoint (₹%.2f - ₹%.2f)" % (or_low, or_high)
-    elif stop_rule == "or-low":
-        if or_low is None:
-            raise PlanError("or-low stop requires --or-low")
-        stop_price = round_tick(or_low, ROUND_FLOOR)
-        stop_reason = "opening range low"
-    elif stop_rule.startswith("price:"):
-        p = Decimal(stop_rule.split(":", 1)[1])
-        stop_price = round_tick(p, ROUND_FLOOR)
-        stop_reason = "fixed price stop"
-    elif stop_rule.startswith("pct:"):
-        pct = Decimal(stop_rule.split(":", 1)[1])
-        p = entry * (Decimal("1") - pct / Decimal("100"))
-        stop_price = round_tick(p, ROUND_FLOOR)
-        stop_reason = "%.1f%% under entry" % float(pct)
-    elif stop_rule.startswith("atr:"):
-        k = Decimal(stop_rule.split(":", 1)[1])
-        atr = compute_atr(bars or []) if bars else None
-        if atr is None:
-            raise PlanError("cannot compute ATR (requires intraday bars)")
-        p = entry - (k * Decimal(str(atr)))
-        stop_price = round_tick(p, ROUND_FLOOR)
-        stop_reason = "%.1fx ATR (₹%.2f) below entry" % (float(k), atr)
-    else:
-        raise PlanError("unknown stop rule: %s" % stop_rule)
+    if side == "buy":
+        if stop_rule == "or-mid":
+            if or_high is None or or_low is None:
+                raise PlanError("or-mid stop requires --or-high and --or-low (or trader/entry.json)")
+            mid = (Decimal(str(or_high)) + Decimal(str(or_low))) / Decimal("2")
+            stop_price = round_tick(mid, ROUND_FLOOR)
+            stop_reason = "opening range midpoint (₹%.2f - ₹%.2f)" % (or_low, or_high)
+        elif stop_rule == "or-low":
+            if or_low is None:
+                raise PlanError("or-low stop requires --or-low")
+            stop_price = round_tick(or_low, ROUND_FLOOR)
+            stop_reason = "opening range low"
+        elif stop_rule.startswith("price:"):
+            p = Decimal(stop_rule.split(":", 1)[1])
+            stop_price = round_tick(p, ROUND_FLOOR)
+            stop_reason = "fixed price stop"
+        elif stop_rule.startswith("pct:"):
+            pct = Decimal(stop_rule.split(":", 1)[1])
+            p = entry * (Decimal("1") - pct / Decimal("100"))
+            stop_price = round_tick(p, ROUND_FLOOR)
+            stop_reason = "%.1f%% under entry" % float(pct)
+        elif stop_rule.startswith("atr:"):
+            k = Decimal(stop_rule.split(":", 1)[1])
+            atr = compute_atr(bars or []) if bars else None
+            if atr is None:
+                raise PlanError("cannot compute ATR (requires intraday bars)")
+            p = entry - (k * Decimal(str(atr)))
+            stop_price = round_tick(p, ROUND_FLOOR)
+            stop_reason = "%.1fx ATR (₹%.2f) below entry" % (float(k), atr)
+        else:
+            raise PlanError("unknown stop rule: %s" % stop_rule)
 
-    if stop_price >= entry:
-        raise PlanError("stop price (₹%.2f) must be lower than entry (₹%.2f)" % (stop_price, entry))
+        if stop_price >= entry:
+            raise PlanError("stop price (₹%.2f) must be lower than entry (₹%.2f)" % (stop_price, entry))
 
-    risk_per_share = entry - stop_price
-    min_risk = entry * (MIN_RISK_PCT / Decimal("100"))
-    if risk_per_share < min_risk:
-        raise PlanError("risk per share (₹%.2f) is below minimum %.2f%% threshold (₹%.2f)" % (
-            risk_per_share, float(MIN_RISK_PCT), min_risk
-        ))
+        risk_per_share = entry - stop_price
+        min_risk = entry * (MIN_RISK_PCT / Decimal("100"))
+        if risk_per_share < min_risk:
+            raise PlanError("risk per share (₹%.2f) is below minimum %.2f%% threshold (₹%.2f)" % (
+                risk_per_share, float(MIN_RISK_PCT), min_risk
+            ))
 
-    # Resolve Target Price
-    target_price = None
-    target_reason = ""
+        # Target Price (Long)
+        if target_rule.endswith("R") or target_rule.endswith("r"):
+            r_mult = Decimal(target_rule[:-1])
+            target_price = round_tick(entry + (r_mult * risk_per_share), ROUND_HALF_UP)
+            target_reason = "%s reward (₹%.2f risk)" % (target_rule.upper(), risk_per_share)
+        elif target_rule.startswith("price:"):
+            p = Decimal(target_rule.split(":", 1)[1])
+            target_price = round_tick(p, ROUND_HALF_UP)
+            target_reason = "fixed price target"
+        else:
+            raise PlanError("unknown target rule: %s" % target_rule)
 
-    if target_rule.endswith("R") or target_rule.endswith("r"):
-        r_mult = Decimal(target_rule[:-1])
-        target_price = round_tick(entry + (r_mult * risk_per_share), ROUND_HALF_UP)
-        target_reason = "%s reward (₹%.2f risk)" % (target_rule.upper(), risk_per_share)
-    elif target_rule.startswith("price:"):
-        p = Decimal(target_rule.split(":", 1)[1])
-        target_price = round_tick(p, ROUND_HALF_UP)
-        target_reason = "fixed price target"
-    else:
-        raise PlanError("unknown target rule: %s" % target_rule)
+        if target_price <= entry:
+            raise PlanError("target price (₹%.2f) must be higher than entry (₹%.2f)" % (target_price, entry))
 
-    if target_price <= entry:
-        raise PlanError("target price (₹%.2f) must be higher than entry (₹%.2f)" % (target_price, entry))
+        reward_per_share = target_price - entry
+        reward_risk_ratio = float(reward_per_share / risk_per_share)
+        be_trigger = round_tick(entry + (Decimal("1.2") * risk_per_share), ROUND_HALF_UP)
+        be_stop = round_tick(entry + Decimal("0.10"), ROUND_HALF_UP)
 
-    reward_per_share = target_price - entry
-    reward_risk_ratio = float(reward_per_share / risk_per_share)
+    else:  # side == "sell" (Short)
+        if stop_rule == "or-mid":
+            if or_high is None or or_low is None:
+                raise PlanError("or-mid stop requires --or-high and --or-low (or trader/entry.json)")
+            mid = (Decimal(str(or_high)) + Decimal(str(or_low))) / Decimal("2")
+            stop_price = round_tick(mid, ROUND_CEILING)
+            stop_reason = "opening range midpoint (₹%.2f - ₹%.2f)" % (or_low, or_high)
+        elif stop_rule in ("or-high", "or-low"):
+            if or_high is None:
+                raise PlanError("or-high stop requires --or-high")
+            stop_price = round_tick(or_high, ROUND_CEILING)
+            stop_reason = "opening range high"
+        elif stop_rule.startswith("price:"):
+            p = Decimal(stop_rule.split(":", 1)[1])
+            stop_price = round_tick(p, ROUND_CEILING)
+            stop_reason = "fixed price stop"
+        elif stop_rule.startswith("pct:"):
+            pct = Decimal(stop_rule.split(":", 1)[1])
+            p = entry * (Decimal("1") + pct / Decimal("100"))
+            stop_price = round_tick(p, ROUND_CEILING)
+            stop_reason = "%.1f%% above entry" % float(pct)
+        elif stop_rule.startswith("atr:"):
+            k = Decimal(stop_rule.split(":", 1)[1])
+            atr = compute_atr(bars or []) if bars else None
+            if atr is None:
+                raise PlanError("cannot compute ATR (requires intraday bars)")
+            p = entry + (k * Decimal(str(atr)))
+            stop_price = round_tick(p, ROUND_CEILING)
+            stop_reason = "%.1fx ATR (₹%.2f) above entry" % (float(k), atr)
+        else:
+            raise PlanError("unknown stop rule: %s" % stop_rule)
+
+        if stop_price <= entry:
+            raise PlanError("stop price (₹%.2f) must be higher than entry (₹%.2f) for short plan" % (stop_price, entry))
+
+        risk_per_share = stop_price - entry
+        min_risk = entry * (MIN_RISK_PCT / Decimal("100"))
+        if risk_per_share < min_risk:
+            raise PlanError("risk per share (₹%.2f) is below minimum %.2f%% threshold (₹%.2f)" % (
+                risk_per_share, float(MIN_RISK_PCT), min_risk
+            ))
+
+        # Target Price (Short)
+        if target_rule.endswith("R") or target_rule.endswith("r"):
+            r_mult = Decimal(target_rule[:-1])
+            target_price = round_tick(entry - (r_mult * risk_per_share), ROUND_HALF_DOWN)
+            target_reason = "%s reward (₹%.2f risk)" % (target_rule.upper(), risk_per_share)
+        elif target_rule.startswith("price:"):
+            p = Decimal(target_rule.split(":", 1)[1])
+            target_price = round_tick(p, ROUND_HALF_DOWN)
+            target_reason = "fixed price target"
+        else:
+            raise PlanError("unknown target rule: %s" % target_rule)
+
+        if target_price >= entry:
+            raise PlanError("target price (₹%.2f) must be lower than entry (₹%.2f) for short plan" % (target_price, entry))
+
+        reward_per_share = entry - target_price
+        reward_risk_ratio = float(reward_per_share / risk_per_share)
+        be_trigger = round_tick(entry - (Decimal("1.2") * risk_per_share), ROUND_HALF_DOWN)
+        be_stop = round_tick(entry - Decimal("0.10"), ROUND_HALF_DOWN)
 
     today = date_str or datetime.date.today().isoformat()
-    be_trigger = round_tick(entry + (Decimal("1.2") * risk_per_share), ROUND_HALF_UP)
-    be_stop = round_tick(entry + Decimal("0.10"), ROUND_HALF_UP)
 
     return {
         "symbol": symbol,
-        "side": "buy",
+        "side": side,
         "date": today,
         "entry_price": float(entry),
         "stop_price": float(stop_price),
@@ -189,6 +252,7 @@ def run_plan(args):
     or_high = args.or_high or entry_data.get("or_high")
     or_low = args.or_low or entry_data.get("or_low")
     date_str = args.date or entry_data.get("date")
+    side = getattr(args, "side", None) or entry_data.get("side", "buy")
 
     # Read config flat_by
     flat_by = DEFAULTS["flat_by"]
@@ -209,6 +273,7 @@ def run_plan(args):
         target_rule=args.target,
         flat_by=flat_by,
         date_str=date_str,
+        side=side,
     )
 
     if args.write or not args.no_write:
@@ -219,7 +284,7 @@ def run_plan(args):
     if args.json:
         print(json.dumps(plan, indent=2))
     else:
-        print("Exit Plan for %s (NSE MIS):" % plan["symbol"])
+        print("Exit Plan for %s [%s] (NSE MIS):" % (plan["symbol"], plan["side"].upper()))
         print("  Entry Price:  ₹%.2f" % plan["entry_price"])
         print("  Stop-Loss:    ₹%.2f (%s, risk ₹%.2f/sh)" % (
             plan["stop_price"], plan["stop_reason"], plan["risk_per_share"]
@@ -259,6 +324,7 @@ def main(argv=None):
 
     p_p = sub.add_parser("plan", help="Create exit plan")
     p_p.add_argument("--symbol", help="Stock ticker (e.g. RELIANCE)")
+    p_p.add_argument("--side", choices=["buy", "sell"], default="buy", help="Trade direction: buy (long) or sell (short)")
     p_p.add_argument("--entry", type=float, help="Entry price in INR")
     p_p.add_argument("--or-high", type=float, help="Opening range high")
     p_p.add_argument("--or-low", type=float, help="Opening range low")

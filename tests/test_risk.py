@@ -138,6 +138,32 @@ class TestRisk(unittest.TestCase):
         self.assertEqual(status_pass, "PASS")
         self.assertEqual(reasons_pass, [])
 
+    def test_valid_short_order_and_nifty_filter(self):
+        short_order = {
+            "symbol": "RELIANCE",
+            "side": "sell",
+            "qty": 20,
+            "entry_price": 2500.0,
+            "stop_loss_price": 2520.0,
+            "take_profit_price": 2460.0,
+            "order_type": "limit",
+        }
+        # Valid short order passes
+        status, reasons = mod.check_order(
+            short_order, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(status, "PASS")
+        self.assertEqual(reasons, [])
+
+        # Short order with stop below entry should BLOCK
+        bad_short = dict(short_order)
+        bad_short["stop_loss_price"] = 2480.0
+        bad_status, bad_reasons = mod.check_order(
+            bad_short, self.cfg, portfolio={}, broker_state={}, prices={}, now_ist=self.now_ist
+        )
+        self.assertEqual(bad_status, "BLOCK")
+        self.assertTrue(any("below entry price" in r for r in bad_reasons))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,7 +29,7 @@ python3 "${CLAUDE_SKILL_DIR}/check.py" --now "2026-10-19 10:15"        # test at
 python3 "${CLAUDE_SKILL_DIR}/check.py" --orders trader/orders.json --json
 ```
 
-Flags: `--orders FILE`, `--nifty-filter` (block long breakouts if Nifty 50 < -1.0%),
+Flags: `--orders FILE`, `--nifty-filter` (block long breakouts if Nifty 50 < -0.30%, block short breakdowns if Nifty 50 > +0.30%),
 `--now "YYYY-MM-DD HH:MM IST"`, `--no-write`, `--json`.
 Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 
@@ -38,7 +38,7 @@ Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 | file | what |
 | --- | --- |
 | `trader/orders.json` | read: proposed bracket orders from trader-budget |
-| `trader/config.json` | read: risk limits (max loss, daily loss, trading windows, `nifty_filter`) |
+| `trader/config.json` | read: risk limits (max loss, daily loss, trading windows, `allow_short`, `nifty_filter`) |
 | `trader/prices.json` | read: current prices and Nifty 50 index level |
 | `trader/portfolio.json` | read: cash balance and open positions |
 | `trader/state/broker.json` | read: orders placed today (for daily limits & duplicates) |
@@ -46,9 +46,9 @@ Exit code 0 when all orders PASS, 1 when any order is BLOCKED.
 
 ## Rules Enforced
 1. **Capital Risk**: `max_loss_per_trade_inr` and `max_daily_loss_inr`
-2. **Stop Protection**: Mandatory stop-loss lower than entry price
+2. **Stop Protection**: Mandatory stop-loss (lower than entry for buy, higher than entry for sell)
 3. **Reward:Risk**: Minimum 1:1 reward-to-risk ratio
 4. **Trading Window**: Entries permitted strictly during morning prime time (09:30 to 10:15 IST)
 5. **Calendar**: Closed on weekends and official NSE trading holidays
-6. **Market Trend**: Broad market filter (blocks aggressive breakout buys when Nifty 50 is trending down > 1.0%)
+6. **Market Trend**: Broad market filter (blocks aggressive breakout buys when Nifty 50 is trending down < -0.30%, blocks short breakdowns when Nifty 50 is trending up > +0.30%)
 7. **Integrity**: No duplicates, no options, whole shares only
